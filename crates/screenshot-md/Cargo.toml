@@ -1,0 +1,11 @@
+[package]
+name = "screenshot-md"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Semantic DOM-to-Markdown AST and writer for FullScreenShot"
+
+[dependencies]
+screenshot-core = { path = "../screenshot-core" }

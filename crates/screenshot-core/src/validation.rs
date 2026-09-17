@@ -18,9 +18,15 @@ pub fn validate_plan(plan: &CapturePlan) -> Result<(), CoreError> {
     let mut seen_offsets = HashSet::new();
     for tile in &plan.tiles {
         if !seen_ids.insert(tile.id) {
-            return Err(CoreError::Overflow(format!("duplicate tile id: {:?}", tile.id)));
+            return Err(CoreError::Overflow(format!(
+                "duplicate tile id: {:?}",
+                tile.id
+            )));
         }
-        let key = (tile.scroll_offset.x.to_bits(), tile.scroll_offset.y.to_bits());
+        let key = (
+            tile.scroll_offset.x.to_bits(),
+            tile.scroll_offset.y.to_bits(),
+        );
         if !seen_offsets.insert(key) {
             return Err(CoreError::Overflow(format!(
                 "duplicate scroll offset in plan: {:?}",
@@ -45,26 +51,50 @@ mod tests {
 
     #[test]
     fn rejects_empty_plan() {
-        let plan = CapturePlan::from_offsets(&[], Size { width: 800.0, height: 600.0 });
+        let plan = CapturePlan::from_offsets(
+            &[],
+            Size {
+                width: 800.0,
+                height: 600.0,
+            },
+        );
         assert!(validate_plan(&plan).is_err());
     }
 
     #[test]
     fn accepts_well_formed_plan() {
-        let plan = CapturePlan::from_offsets(&[0.0, 500.0], Size { width: 800.0, height: 600.0 });
+        let plan = CapturePlan::from_offsets(
+            &[0.0, 500.0],
+            Size {
+                width: 800.0,
+                height: 600.0,
+            },
+        );
         assert!(validate_plan(&plan).is_ok());
     }
 
     #[test]
     fn rejects_duplicate_scroll_offsets() {
-        let mut plan = CapturePlan::from_offsets(&[0.0, 500.0], Size { width: 800.0, height: 600.0 });
+        let mut plan = CapturePlan::from_offsets(
+            &[0.0, 500.0],
+            Size {
+                width: 800.0,
+                height: 600.0,
+            },
+        );
         plan.tiles[1].scroll_offset = plan.tiles[0].scroll_offset;
         assert!(validate_plan(&plan).is_err());
     }
 
     #[test]
     fn rejects_zero_size_crop() {
-        let mut plan = CapturePlan::from_offsets(&[0.0], Size { width: 800.0, height: 600.0 });
+        let mut plan = CapturePlan::from_offsets(
+            &[0.0],
+            Size {
+                width: 800.0,
+                height: 600.0,
+            },
+        );
         plan.tiles[0].crop.size.width = 0.0;
         assert!(validate_plan(&plan).is_err());
     }

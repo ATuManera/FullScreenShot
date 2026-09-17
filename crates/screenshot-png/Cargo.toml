@@ -1,0 +1,12 @@
+[package]
+name = "screenshot-png"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lossless PNG encoding for FullScreenShot captures"
+
+[dependencies]
+screenshot-core = { path = "../screenshot-core" }
+png = "0.17"
