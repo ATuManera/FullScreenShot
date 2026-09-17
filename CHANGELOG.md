@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   real Markdown export (DOM-to-AST extraction, Article/Full DOM modes,
   YAML frontmatter, untrusted-AST sanitization) for Capture Full Page and
   Selected Scroll Area, plus a popup export-format selector.
+- P4: Safari packaging preparation — compatibility analysis, a
+  `safari-web-extension-converter` wrapper script, `cargo xtask package
+  chromium|safari`, and a version-consistency check across Cargo.toml/
+  manifest/package.json.
 
 - P0 Foundation: Rust workspace (`screenshot-core`, `screenshot-png`,
   `screenshot-pdf`, `screenshot-md`, `screenshot-wasm`) with capture

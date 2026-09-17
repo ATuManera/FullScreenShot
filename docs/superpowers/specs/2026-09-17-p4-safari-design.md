@@ -61,8 +61,32 @@ cualquier credential de Apple Developer.
 - `cargo xtask package safari` expone el subcomando.
 - Todo el gate de Chrome/Edge (P0–P3) sigue en verde sin regresión.
 
+## Gate de salida de P4 — resultado real
+
+- `browser/safari/README.md` escrito con la tabla de estado exacta y el
+  análisis de compatibilidad (probable vs. riesgo no verificado).
+- `browser/safari/convert.sh` ejecutado realmente en este entorno:
+  falla con `exit_code=1` y el mensaje claro esperado ("xcrun:
+  safari-web-extension-converter is not available... install Xcode").
+  Este es el resultado CORRECTO, no un fallo del gate.
+- `cargo xtask package safari` ejecutado: propaga el mismo fallo
+  limpiamente (mismo exit code, mismo mensaje).
+- `cargo xtask package chromium` ejecutado con éxito real:
+  `artifacts/fullscreen-shot-chromium-0.1.0.zip` generado (162.896
+  bytes), contenido verificado (manifest.json, background/, popup/,
+  options/, result/, wasm/, browser/, capture/ — todo lo esperado).
+- Verificación de consistencia de versión (nueva, sección 31 del
+  prompt maestro) ejecutada: `extension/manifest.base.json` y
+  `extension/package.json` coinciden con la versión del workspace
+  Cargo.toml (`0.1.0`).
+- Gate completo de Chrome/Edge (P0–P3): 92 tests Rust + typecheck +
+  tests Node, sin regresión.
+- No se modificó código de captura ya probado en Chrome/Edge con
+  cambios especulativos de Safari.
+
 ## Historial
 
 | Fecha | Commits de código | Cambio |
 |---|---|---|
-| 2026-09-17 | (se completa al finalizar P4) | Creación del spec P4 |
+| 2026-09-17 | `fc6c923` | Creación del spec P4 |
+| 2026-09-17 | `4e44508` | Preparación completa de Safari: análisis de compatibilidad, script de conversión (falla limpiamente sin Xcode completo, verificado), `cargo xtask package chromium/safari`, verificación de consistencia de versiones. |
