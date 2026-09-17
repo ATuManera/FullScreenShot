@@ -33,7 +33,8 @@ fn hostile_json_contains_no_script_style_iframe_or_canvas_node() {
 
 #[test]
 fn parses_hostile_ast_without_error() {
-    Document::from_untrusted_json(HOSTILE_JSON).expect("hostile but structurally valid AST must still parse");
+    Document::from_untrusted_json(HOSTILE_JSON)
+        .expect("hostile but structurally valid AST must still parse");
 }
 
 #[test]
@@ -51,10 +52,22 @@ fn final_markdown_strips_every_dangerous_url_but_keeps_all_safe_content() {
     // *label* text "javascript: link" the fixture also has, which is
     // expected to survive since only the href/src is dangerous, not the
     // visible text naming it.
-    assert!(!md.contains("](javascript:"), "javascript: scheme leaked into a Markdown link/image target:\n{md}");
-    assert!(!md.contains("](data:text/html"), "data:text/html scheme leaked into a Markdown link/image target:\n{md}");
-    assert!(!md.contains("<script>"), "raw <script> tag content leaked into output:\n{md}");
-    assert!(!md.contains("document.cookie"), "javascript: payload leaked into output:\n{md}");
+    assert!(
+        !md.contains("](javascript:"),
+        "javascript: scheme leaked into a Markdown link/image target:\n{md}"
+    );
+    assert!(
+        !md.contains("](data:text/html"),
+        "data:text/html scheme leaked into a Markdown link/image target:\n{md}"
+    );
+    assert!(
+        !md.contains("<script>"),
+        "raw <script> tag content leaked into output:\n{md}"
+    );
+    assert!(
+        !md.contains("document.cookie"),
+        "javascript: payload leaked into output:\n{md}"
+    );
 
     // The safe link is preserved as a real Markdown link.
     assert!(md.contains("[perfectly safe link](https://example.com/safe)"));
