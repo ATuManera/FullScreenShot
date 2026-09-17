@@ -1,0 +1,28 @@
+# Changelog
+
+All notable changes to FullScreenShot are documented in this file.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+### Added
+
+- P0 Foundation: Rust workspace (`screenshot-core`, `screenshot-png`,
+  `screenshot-pdf`, `screenshot-md`, `screenshot-wasm`) with capture
+  geometry/planning, PNG encoding, PDF pagination, Markdown AST/writer,
+  and a WASM bridge exposing tile planning.
+- Legal and attribution documentation: `LICENSE` (MPL-2.0, Incompatible
+  With Secondary Licenses), `AUTHORS.md`, `NOTICE.md`, `TRADEMARKS.md`,
+  `THIRD_PARTY_NOTICES.md`, `SECURITY.md`, `PRIVACY.md`,
+  `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`.
+- Minimal Manifest V3 extension shell that loads in Chrome/Edge.
+- Architecture Decision Records: ADR-0001, ADR-0002, ADR-0006 for
+  P0-relevant decisions.
+- Basic CI (GitHub Actions): fmt, clippy, tests, workspace build, WASM
+  build, TypeScript typecheck.
+
+## [0.1.0] - Unreleased
+
+Initial foundation. Not yet functional for end-user captures (see
+`docs/superpowers/specs/2026-09-17-p0-foundation-design.md` for scope).
