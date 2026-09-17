@@ -1,32 +1,17 @@
 // SPDX-License-Identifier: MPL-2.0-no-copyleft-exception
 // Copyright (c) 2026 ATuManera / Fernando Gallarday
 
-use screenshot_core::{CoreError, Size};
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PageSize {
-    A4,
-    Letter,
-    Auto(Size),
-}
-
-impl PageSize {
-    fn css_height_px(&self) -> f64 {
-        match self {
-            // A4 at 96 CSS px/inch: 11.69in
-            PageSize::A4 => 1122.24,
-            // Letter at 96 CSS px/inch: 11in
-            PageSize::Letter => 1056.0,
-            PageSize::Auto(size) => size.height,
-        }
-    }
-}
+use screenshot_core::CoreError;
 
 /// Splits `content_height` into non-overlapping, gap-free (start, end)
-/// ranges of at most `page_height` CSS px each.
-pub fn paginate(content_height: f64, page_size: PageSize) -> Result<Vec<(f64, f64)>, CoreError> {
-    let page_height = page_size.css_height_px();
-    if content_height < 0.0 || page_height <= 0.0 {
+/// ranges of at most `page_height` each (same unit as `content_height` —
+/// callers decide whether that's CSS px, device px, or PDF points).
+pub fn paginate(content_height: f64, page_height: f64) -> Result<Vec<(f64, f64)>, CoreError> {
+    if content_height < 0.0
+        || page_height <= 0.0
+        || !content_height.is_finite()
+        || !page_height.is_finite()
+    {
         return Err(CoreError::InvalidDimensions {
             width: 0,
             height: content_height.max(0.0) as u32,
@@ -52,24 +37,13 @@ mod tests {
 
     #[test]
     fn single_page_when_content_fits() {
-        let pages = paginate(
-            500.0,
-            PageSize::Auto(Size {
-                width: 800.0,
-                height: 1000.0,
-            }),
-        )
-        .unwrap();
+        let pages = paginate(500.0, 1000.0).unwrap();
         assert_eq!(pages, vec![(0.0, 500.0)]);
     }
 
     #[test]
     fn splits_into_multiple_non_overlapping_pages() {
-        let page = PageSize::Auto(Size {
-            width: 800.0,
-            height: 1000.0,
-        });
-        let pages = paginate(2500.0, page).unwrap();
+        let pages = paginate(2500.0, 1000.0).unwrap();
         assert_eq!(
             pages,
             vec![(0.0, 1000.0), (1000.0, 2000.0), (2000.0, 2500.0)]
@@ -83,17 +57,26 @@ mod tests {
     }
 
     #[test]
-    fn a4_and_letter_produce_distinct_page_heights() {
+    fn different_page_heights_produce_different_page_counts() {
         let content = 3000.0;
-        let a4_pages = paginate(content, PageSize::A4).unwrap();
-        let letter_pages = paginate(content, PageSize::Letter).unwrap();
-        assert_ne!(a4_pages.len(), 0);
-        assert_ne!(letter_pages.len(), 0);
-        assert_ne!(a4_pages[0].1, letter_pages[0].1);
+        let short_pages = paginate(content, 1122.24).unwrap();
+        let long_pages = paginate(content, 4000.0).unwrap();
+        assert!(short_pages.len() > long_pages.len());
     }
 
     #[test]
     fn rejects_negative_content_height() {
-        assert!(paginate(-1.0, PageSize::A4).is_err());
+        assert!(paginate(-1.0, 1000.0).is_err());
+    }
+
+    #[test]
+    fn rejects_non_positive_page_height() {
+        assert!(paginate(100.0, 0.0).is_err());
+        assert!(paginate(100.0, -10.0).is_err());
+    }
+
+    #[test]
+    fn zero_content_height_yields_one_empty_page() {
+        assert_eq!(paginate(0.0, 1000.0).unwrap(), vec![(0.0, 0.0)]);
     }
 }

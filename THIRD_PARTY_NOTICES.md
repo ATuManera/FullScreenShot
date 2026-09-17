@@ -9,6 +9,8 @@ This file is updated whenever a new runtime dependency is added.
 | [`wasm-bindgen`](https://crates.io/crates/wasm-bindgen) | MIT OR Apache-2.0 | Rust/JS interop for the WASM bridge (`screenshot-wasm`) |
 | [`js-sys`](https://crates.io/crates/js-sys) | MIT OR Apache-2.0 | JS type bindings for the WASM bridge (`screenshot-wasm`) |
 | [`proptest`](https://crates.io/crates/proptest) | MIT OR Apache-2.0 | Property-based testing (dev-dependency only, not shipped) |
+| [`pdf-writer`](https://crates.io/crates/pdf-writer) | MIT OR Apache-2.0 | Low-level PDF document generation (`screenshot-pdf`) |
+| [`flate2`](https://crates.io/crates/flate2) | MIT OR Apache-2.0 | DEFLATE/zlib compression for PDF image streams (`screenshot-pdf`) |
 
 None of the above components are modified from their published form;
 they are used as unmodified dependencies via Cargo/crates.io. No

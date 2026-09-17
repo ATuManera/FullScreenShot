@@ -9,3 +9,5 @@ description = "Paginated raster PDF export for FullScreenShot captures"
 
 [dependencies]
 screenshot-core = { path = "../screenshot-core" }
+pdf-writer = "0.12"
+flate2 = "1"
