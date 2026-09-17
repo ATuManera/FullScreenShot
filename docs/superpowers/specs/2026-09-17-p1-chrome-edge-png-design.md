@@ -103,8 +103,53 @@ end-to-end aquí. Lo que sí se verifica automáticamente:
   (reutilizando `validate_plan` de P0).
 - `dist/chromium/` regenerado y validado estructuralmente (como en P0).
 
+## Evidencia de verificación real (Playwright, navegador Chromium real)
+
+Ejecutado contra el código compilado real (`dist/chromium/capture/*.js`),
+cargado vía `data:` URL con el byte-a-byte de los fixtures reales (no se
+pudo usar un servidor local ni `file://` por restricciones de red/sandboxing
+del entorno de este agente — ver nota en el gate):
+
+- `sticky-header.html`: `findFixedAndStickyElements` detectó `#sticky-header`;
+  `hideElements` lo puso `visibility: hidden` sin removerlo del DOM
+  (`domStillContainsElements: true`); `restoreElements` lo devolvió a
+  `visibility: visible` y removió el atributo marcador.
+- `fixed-elements.html`: detectó correctamente `#fixed-header` y
+  `#fixed-footer` (dos elementos `position: fixed`).
+- `long-page.html`: `measurePage` devolvió `scrollHeight: 8088` (10
+  secciones × 800px + encabezado + bordes — consistente con el markup
+  real) y `viewportWidth/viewportHeight` reales del viewport de Chromium.
+
+## Gate de salida de P1
+
+- `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
+  `cargo test --workspace` (60 passed, 0 failed), `cargo build --workspace`,
+  build WASM (`wasm32-unknown-unknown` + `wasm-pack build --target web`) —
+  todos en verde.
+- `npm run typecheck` en verde (incluye `orchestrator.ts`, `background/`,
+  `result/`, `popup.ts`).
+- Verificación Playwright de `geometry.ts`/`sticky.ts` contra
+  `long-page.html`, `sticky-header.html`, `fixed-elements.html` — en verde
+  (ver sección anterior). `fractional-dpr.html` queda pendiente para P2
+  cuando se añada el ajuste de DPR fraccional al orchestrator.
+- Tests Rust del compositor (heredados de P0, ampliados): tile único,
+  multi-tile sin huecos/duplicados, DPR fraccional, encoder PNG streaming
+  con round-trip de decodificación real.
+- `cargo xtask build` ejecuta el pipeline completo (workspace → wasm32 →
+  wasm-pack → `dist/chromium/`) de punta a punta sin intervención manual;
+  las rutas de import del grafo compilado (`background/index.js` →
+  `../wasm/screenshot_wasm.js`, etc.) se verificaron que resuelven en disco.
+- **No verificado en este entorno**: carga real de la extensión en una
+  ventana de Chrome/Edge con GUI y ejecución real de `captureVisibleTab()`
+  contra una pestaña — este entorno de ejecución no tiene navegador GUI
+  local ni acceso de red a un servidor localhost propio (Playwright aquí
+  corre en un sandbox separado que solo alcanza internet pública, ni
+  `file://` ni `127.0.0.1`). Queda como verificación manual pendiente,
+  igual que en P0.
+
 ## Historial
 
 | Fecha | Commits de código | Cambio |
 |---|---|---|
-| 2026-09-17 | (se completa al finalizar P1) | Creación del spec P1 |
+| 2026-09-17 | `46b59f0` | Creación del spec P1 |
+| 2026-09-17 | `1deba96`, `0e97ac8`, `ba539eb`, `9919879` | Implementación completa de P1: rate limiter, compositor streaming, PNG streaming real, bridge WASM ampliado (composeFullPagePng, RateLimiter), capa capture/ del navegador (geometry/sticky/state/injectable/orchestrator), mensajería background↔popup, página de resultado sin permiso `downloads`. Verificado con Playwright contra fixtures reales. |

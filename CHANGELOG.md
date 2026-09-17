@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- P1: real Capture Visible and Capture Full Page in Chrome/Edge, producing
+  a valid PNG — rate-limited `captureVisibleTab()` tiling, fixed/sticky
+  element handling, transactional page-state restore on success/cancel/
+  error, streaming Rust compositor, and a result page for viewing/
+  downloading the PNG without the `downloads` permission.
+
 - P0 Foundation: Rust workspace (`screenshot-core`, `screenshot-png`,
   `screenshot-pdf`, `screenshot-md`, `screenshot-wasm`) with capture
   geometry/planning, PNG encoding, PDF pagination, Markdown AST/writer,
