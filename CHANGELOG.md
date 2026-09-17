@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   element handling, transactional page-state restore on success/cancel/
   error, streaming Rust compositor, and a result page for viewing/
   downloading the PNG without the `downloads` permission.
+- P2: Selected Scroll Area (interactive container picker + internal-scroll
+  capture with viewport cropping), Reliable lazy-loading mode with
+  infinite-scroll detection, and a configurable tile-count safety limit.
 
 - P0 Foundation: Rust workspace (`screenshot-core`, `screenshot-png`,
   `screenshot-pdf`, `screenshot-md`, `screenshot-wasm`) with capture

@@ -48,18 +48,27 @@ dependencias (P5).
   la *detección* de "altura sigue creciendo" es una comparación numérica
   simple, testeable sin DOM.
 
-## Gate de salida de P2
+## Gate de salida de P2 — resultado real
 
-- Tests Rust existentes siguen en verde (sin regresión).
-- Nueva función pura `detectUnstableGrowth` (o equivalente) con tests
-  Playwright/unitarios reutilizando el patrón de P1.
-- Selected Scroll Area: lógica de detección de contenedor
-  (`isScrollContainer`, ya existe desde P1) verificada contra
-  `nested-scroll.html` con Playwright real.
-- `cargo fmt/clippy/test`, `npm run typecheck` en verde.
+- Tests Rust: 60 passed, 0 failed (sin regresión respecto a P1).
+- `capture/lazy.ts` (`isStillGrowing`, `classifyPrescrollOutcome`): 7/7 tests
+  reales vía `node --test` contra el output compilado (nuevo lane de test
+  sin dependencias añadido en esta fase).
+- Selected Scroll Area: verificado en vivo con Playwright contra
+  `nested-scroll.html` — detección del candidato `#scroll-container`,
+  resolución correcta al hacer clic (`{attr, value: "0"}`), limpieza del
+  atributo marcador tanto en el camino "elegido" como en el de
+  cancelación con Escape (el fix de `cleanup(keepAttrOn)` se verificó
+  después de corregir un bug real: el atributo quedaba en candidatos no
+  elegidos).
+- `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace`,
+  `npm run typecheck`, `npm test` (Node) — todos en verde, unificados en
+  `cargo xtask test`.
+- CI (`ci.yml`) ejecuta `npm test` además de `npm run typecheck`.
 
 ## Historial
 
 | Fecha | Commits de código | Cambio |
 |---|---|---|
-| 2026-09-17 | (se completa al finalizar P2) | Creación del spec P2 |
+| 2026-09-17 | `3187cbd` | Creación del spec P2 |
+| 2026-09-17 | `52cfc50` | Implementación completa de P2: Selected Scroll Area con selección interactiva verificada en Chromium real, modo Reliable de lazy-loading con detección de scroll infinito, límite de seguridad de tiles, lane de tests Node sin dependencias. |
