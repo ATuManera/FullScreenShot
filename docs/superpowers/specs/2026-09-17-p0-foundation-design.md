@@ -98,4 +98,5 @@ Explícitamente fuera de P0 (van en fases posteriores):
 
 | Fecha | Commits de código | Cambio |
 |---|---|---|
-| 2026-09-17 | (pendiente, se completa tras implementar P0) | Creación inicial del spec P0 |
+| 2026-09-17 | `dea1901` | Creación inicial del spec P0 |
+| 2026-09-17 | `3258fb5`, `0221bdb`, `f952305`, `c3f5d47`, `4ddc6d1`, `56edcf2`, `714a78f`, `a6f756f`, `01375d1`, `d5a7187` | Implementación completa de P0: workspace Rust (5 crates), legal/licensing, ADRs 0001/0002/0006, shell MV3, fixtures, xtask, CI. Gate de salida verificado: `cargo fmt --check` OK, `cargo clippy -D warnings` OK, `cargo test --workspace` 38 passed/0 failed, `cargo build --workspace` OK, WASM build OK, `npm run typecheck` OK. |
