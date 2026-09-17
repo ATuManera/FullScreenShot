@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - P2: Selected Scroll Area (interactive container picker + internal-scroll
   capture with viewport cropping), Reliable lazy-loading mode with
   infinite-scroll detection, and a configurable tile-count safety limit.
+- P3: real paginated PDF export (A4/Letter/Auto, Portrait/Landscape) and
+  real Markdown export (DOM-to-AST extraction, Article/Full DOM modes,
+  YAML frontmatter, untrusted-AST sanitization) for Capture Full Page and
+  Selected Scroll Area, plus a popup export-format selector.
 
 - P0 Foundation: Rust workspace (`screenshot-core`, `screenshot-png`,
   `screenshot-pdf`, `screenshot-md`, `screenshot-wasm`) with capture

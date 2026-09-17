@@ -68,18 +68,37 @@ empaquetado de artefactos (P6).
   explícitamente la entrada no confiable en un solo punto de entrada
   (`Document::from_untrusted_json`).
 
-## Gate de salida de P3
+## Gate de salida de P3 — resultado real
 
-- Tests Rust de `screenshot-pdf`: PDF válido (cabecera `%PDF`, `%%EOF`,
-  conteo de páginas correcto vía escaneo estructural), multi-página,
-  A4/Letter/Auto, Portrait/Landscape.
-- Tests Rust de `screenshot-md`: parser JSON→AST rechaza entrada
-  malformada/hostil sin panic; escritura de cabecera YAML determinística.
-- PNG sigue sin regresiones (P0/P1/P2 en verde).
-- `cargo fmt/clippy/test`, `npm run typecheck`, `npm test` en verde.
+- Tests Rust totales: 92 passed, 0 failed (39 core + 32 md + 2 md-integration
+  + 13 pdf + 6 png), sin regresión sobre P0–P2.
+- `screenshot-pdf`: PDF válido (cabecera `%PDF-`, `%%EOF`, conteo exacto de
+  objetos `/Type /Page` vía escaneo estructural — sin añadir una segunda
+  dependencia de parseo de PDF solo para tests), paginación multi-página
+  real en A4, diferencias reales entre A4/Letter y Portrait/Landscape,
+  build en `wasm32-unknown-unknown` verificado.
+- `screenshot-md`: el shape JSON exacto de `Node`/`Document` (adjacently
+  tagged) se verificó imprimiendo la serialización real de Rust antes de
+  escribir el extractor TypeScript — no se asumió. El límite de
+  profundidad (`MAX_TREE_DEPTH`) se ajustó de 64 a 32 tras un test que
+  falló al descubrir que `serde_json` consume ~2 niveles de su propio
+  límite de recursión (128) por cada nivel de `Node` (objeto + array).
+- **Integración real navegador→Rust**: el extractor `extractMarkdownAst`
+  compilado se ejecutó con Playwright contra `tests/pages/markdown-content.html`
+  en un Chromium real; el JSON exacto que produjo se capturó verbatim
+  como fixture en `crates/screenshot-md/tests/browser_extracted_ast.rs` y
+  se parseó/renderizó con el pipeline Rust real, confirmando: heading,
+  `**strong**`, `_emphasis_`, link seguro preservado, link
+  `javascript:` con href eliminado pero texto conservado, lista, tabla
+  con separador de cabecera, bloque de código con lenguaje, blockquote.
+- `cargo fmt --check`, `cargo clippy -D warnings`, `npm run typecheck`,
+  `npm test` (Node) — todos en verde.
+- `cargo xtask build` regenera `dist/chromium/` de punta a punta con los
+  nuevos exports WASM (`composeFullPagePdf`, `markdownFromJson`).
 
 ## Historial
 
 | Fecha | Commits de código | Cambio |
 |---|---|---|
-| 2026-09-17 | (se completa al finalizar P3) | Creación del spec P3 |
+| 2026-09-17 | `b436c94` | Creación del spec P3 y ADRs 0003/0004/0005 |
+| 2026-09-17 | `139cd3c`, `9ca1b4a`, `79bdb58` | Implementación completa de P3: generador PDF real (pdf-writer), AST Markdown con parser JSON no confiable y renderizado completo, extractor DOM real verificado en Chromium, wiring end-to-end en la extensión (popup, background, result page). |
