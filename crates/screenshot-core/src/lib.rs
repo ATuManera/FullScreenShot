@@ -5,8 +5,10 @@ pub mod capture_plan;
 pub mod compositor;
 pub mod error;
 pub mod geometry;
+pub mod rate_limiter;
 pub mod tile;
 pub mod validation;
 
 pub use error::CoreError;
 pub use geometry::{DevicePixelRatio, Point, Rect, Size};
+pub use rate_limiter::RateLimiter;

@@ -3,6 +3,10 @@
 
 use screenshot_core::CoreError;
 
+mod stream;
+
+pub use stream::{compose_full_page_png, encode_streaming};
+
 pub fn encode_rgba(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, CoreError> {
     if width == 0 || height == 0 {
         return Err(CoreError::InvalidDimensions { width, height });
