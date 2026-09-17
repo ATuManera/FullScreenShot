@@ -11,7 +11,7 @@
  */
 export const PORT_NAME = "fullscreenshot-capture";
 
-export type CaptureMode = "visible" | "fullpage";
+export type CaptureMode = "visible" | "fullpage" | "scrollarea";
 
 export interface StartCaptureMessage {
   type: "START_CAPTURE";
@@ -45,10 +45,14 @@ export interface ErrorMessage {
   message: string;
 }
 
-export type OutboundMessage = ProgressMessage | DoneMessage | CancelledMessage | ErrorMessage;
+export interface NoContainerSelectedMessage {
+  type: "NO_CONTAINER_SELECTED";
+}
+
+export type OutboundMessage = ProgressMessage | DoneMessage | CancelledMessage | ErrorMessage | NoContainerSelectedMessage;
 
 function isCaptureMode(value: unknown): value is CaptureMode {
-  return value === "visible" || value === "fullpage";
+  return value === "visible" || value === "fullpage" || value === "scrollarea";
 }
 
 /** Validates an untrusted message received on the capture port. */

@@ -10,10 +10,27 @@
  */
 import { isCapturableUrl, measurePage, type PageMetrics } from "./geometry.js";
 import { hideFixedAndStickyElements, restoreFixedAndStickyElements } from "./injectable.js";
+import { classifyPrescrollOutcome, DEFAULT_MAX_PRESCROLL_PASSES } from "./lazy.js";
+import {
+  boundingRectBySelector,
+  measureContainerBySelector,
+  scrollContainerBySelector,
+  type ContainerSelector,
+} from "./selection.js";
 import { begin, restore, suppressSmoothScroll, type PageStateSnapshot } from "./state.js";
 import initWasm, { composeFullPagePng, planTiles, RateLimiter } from "../wasm/screenshot_wasm.js";
 
 const DEFAULT_TILE_OVERLAP_CSS_PX = 40;
+/**
+ * Independent of (and lower than) `plan_tile_offsets`'s internal 100,000
+ * hard cap (P0) — this is a second, configurable line of defense so an
+ * absurd capture is rejected with a clear message before any tab
+ * scrolling/capturing starts, rather than relying solely on the Rust
+ * core's limit as the only guard (spec section 13).
+ */
+const MAX_TILES_SAFETY_LIMIT = 500;
+
+export type LazyMode = "fast" | "reliable";
 
 export class CaptureCancelledError extends Error {
   constructor() {
@@ -26,6 +43,27 @@ export class PageNotCapturableError extends Error {
   constructor() {
     super("This browser does not allow extensions to capture this page.");
     this.name = "PageNotCapturableError";
+  }
+}
+
+export class TooManyTilesError extends Error {
+  constructor(tileCount: number, limit: number) {
+    super(`This page would require ${tileCount} tiles, which exceeds the ${limit}-tile safety limit.`);
+    this.name = "TooManyTilesError";
+  }
+}
+
+export class NoScrollContainerSelectedError extends Error {
+  constructor() {
+    super("Selected scroll container is no longer on the page.");
+    this.name = "NoScrollContainerSelectedError";
+  }
+}
+
+export class PossiblyInfiniteScrollError extends Error {
+  constructor() {
+    super("This page appears to load content indefinitely while scrolling (infinite scroll) — capture stopped at the pre-scroll limit.");
+    this.name = "PossiblyInfiniteScrollError";
   }
 }
 
@@ -73,6 +111,49 @@ async function decodePngDataUrlToRgba(dataUrl: string): Promise<{ width: number;
   }
 }
 
+async function decodeAndCropPngDataUrlToRgba(
+  dataUrl: string,
+  cropCssRect: { x: number; y: number; width: number; height: number },
+  dpr: number,
+): Promise<{ width: number; height: number; rgba: Uint8Array }> {
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const sx = Math.max(0, Math.round(cropCssRect.x * dpr));
+    const sy = Math.max(0, Math.round(cropCssRect.y * dpr));
+    const width = Math.max(1, Math.min(bitmap.width - sx, Math.round(cropCssRect.width * dpr)));
+    const height = Math.max(1, Math.min(bitmap.height - sy, Math.round(cropCssRect.height * dpr)));
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("2D canvas context unavailable in this browser");
+    }
+    ctx.drawImage(bitmap, sx, sy, width, height, 0, 0, width, height);
+    const imageData = ctx.getImageData(0, 0, width, height);
+    return { width, height, rgba: new Uint8Array(imageData.data.buffer) };
+  } finally {
+    bitmap.close();
+  }
+}
+
+function concatenateRgba(chunks: Uint8Array[]): Uint8Array {
+  const totalLen = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const concatenated = new Uint8Array(totalLen);
+  let cursor = 0;
+  for (const chunk of chunks) {
+    concatenated.set(chunk, cursor);
+    cursor += chunk.length;
+  }
+  return concatenated;
+}
+
+function assertWithinTileSafetyLimit(offsets: number[]): void {
+  if (offsets.length > MAX_TILES_SAFETY_LIMIT) {
+    throw new TooManyTilesError(offsets.length, MAX_TILES_SAFETY_LIMIT);
+  }
+}
+
 async function getCapturableTab(tabId: number): Promise<chrome.tabs.Tab> {
   const tab = await chrome.tabs.get(tabId);
   if (!tab.url || !isCapturableUrl(tab.url)) {
@@ -101,16 +182,12 @@ export async function captureFullPage(
   tabId: number,
   onProgress: ProgressCallback,
   isCancelled: () => boolean,
+  lazyMode: LazyMode = "fast",
 ): Promise<CaptureResult> {
   await ensureWasm();
   const tab = await getCapturableTab(tabId);
 
   onProgress("Preparing…");
-  const [{ result: metrics }] = (await chrome.scripting.executeScript({
-    target: { tabId },
-    func: measurePage,
-  })) as unknown as [{ result: PageMetrics }];
-
   const [{ result: snapshot }] = (await chrome.scripting.executeScript({
     target: { tabId },
     func: begin,
@@ -119,7 +196,17 @@ export async function captureFullPage(
   try {
     await chrome.scripting.executeScript({ target: { tabId }, func: suppressSmoothScroll });
 
+    if (lazyMode === "reliable") {
+      await runReliablePrescroll(tabId, onProgress, isCancelled);
+    }
+
+    const [{ result: metrics }] = (await chrome.scripting.executeScript({
+      target: { tabId },
+      func: measurePage,
+    })) as unknown as [{ result: PageMetrics }];
+
     const offsets = planTiles(metrics.viewportHeight, metrics.scrollHeight, DEFAULT_TILE_OVERLAP_CSS_PX);
+    assertWithinTileSafetyLimit(offsets);
     const rateLimiter = RateLimiter.defaultForCapture();
 
     const tileWidths: number[] = [];
@@ -175,13 +262,7 @@ export async function captureFullPage(
     }
 
     onProgress("Processing…");
-    const totalLen = rgbaChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-    const concatenated = new Uint8Array(totalLen);
-    let cursor = 0;
-    for (const chunk of rgbaChunks) {
-      concatenated.set(chunk, cursor);
-      cursor += chunk.length;
-    }
+    const concatenated = concatenateRgba(rgbaChunks);
 
     const dpr = metrics.devicePixelRatio;
     const pngBytes = composeFullPagePng(
@@ -205,6 +286,163 @@ export async function captureFullPage(
       target: { tabId },
       func: restore,
       args: [snapshot],
+    });
+  }
+}
+
+/**
+ * "Reliable" lazy-loading mode: scrolls to the bottom and back up to the
+ * top repeatedly (bounded by `DEFAULT_MAX_PRESCROLL_PASSES`), re-measuring
+ * `scrollHeight` each pass, to give `img[loading=lazy]` and similar
+ * dynamic content a chance to load before the real tile-by-tile capture
+ * begins. Throws `PossiblyInfiniteScrollError` rather than looping forever
+ * if the page keeps growing right up to the pass limit.
+ */
+async function runReliablePrescroll(tabId: number, onProgress: ProgressCallback, isCancelled: () => boolean): Promise<void> {
+  const samples: number[] = [];
+  for (let pass = 0; pass < DEFAULT_MAX_PRESCROLL_PASSES; pass++) {
+    if (isCancelled()) {
+      throw new CaptureCancelledError();
+    }
+    onProgress(`Preparing… (pre-scroll ${pass + 1}/${DEFAULT_MAX_PRESCROLL_PASSES})`);
+
+    const [{ result: metrics }] = (await chrome.scripting.executeScript({
+      target: { tabId },
+      func: measurePage,
+    })) as unknown as [{ result: PageMetrics }];
+    samples.push(metrics.scrollHeight);
+
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (y: number) => window.scrollTo(0, y),
+      args: [metrics.scrollHeight],
+    });
+    await sleep(250);
+
+    const outcome = classifyPrescrollOutcome(samples, DEFAULT_MAX_PRESCROLL_PASSES);
+    if (outcome === "settled" && samples.length >= 2) {
+      break;
+    }
+    if (outcome === "possibly-infinite" && samples.length >= DEFAULT_MAX_PRESCROLL_PASSES) {
+      await chrome.scripting.executeScript({ target: { tabId }, func: (y: number) => window.scrollTo(0, y), args: [0] });
+      throw new PossiblyInfiniteScrollError();
+    }
+  }
+  await chrome.scripting.executeScript({ target: { tabId }, func: (y: number) => window.scrollTo(0, y), args: [0] });
+}
+
+/**
+ * Capture Selected Scroll Area: like `captureFullPage`, but scrolls a
+ * chosen element's own `scrollTop` instead of the window, and crops every
+ * captured viewport screenshot down to that element's on-screen bounding
+ * box before handing it to the same Rust compositor. The rest of the page
+ * around the container never becomes part of the composited output.
+ */
+export async function captureScrollArea(
+  tabId: number,
+  selector: ContainerSelector,
+  onProgress: ProgressCallback,
+  isCancelled: () => boolean,
+): Promise<CaptureResult> {
+  await ensureWasm();
+  const tab = await getCapturableTab(tabId);
+
+  onProgress("Preparing…");
+  const [{ result: metrics }] = (await chrome.scripting.executeScript({
+    target: { tabId },
+    func: measureContainerBySelector,
+    args: [selector.attr, selector.value],
+  })) as unknown as [{ result: ReturnType<typeof measureContainerBySelector> }];
+
+  if (!metrics) {
+    throw new NoScrollContainerSelectedError();
+  }
+
+  const [{ result: rect }] = (await chrome.scripting.executeScript({
+    target: { tabId },
+    func: boundingRectBySelector,
+    args: [selector.attr, selector.value],
+  })) as unknown as [{ result: ReturnType<typeof boundingRectBySelector> }];
+
+  if (!rect) {
+    throw new NoScrollContainerSelectedError();
+  }
+
+  const offsets = planTiles(metrics.clientHeight, metrics.scrollHeight, DEFAULT_TILE_OVERLAP_CSS_PX);
+  assertWithinTileSafetyLimit(offsets);
+  const rateLimiter = RateLimiter.defaultForCapture();
+
+  const tileWidths: number[] = [];
+  const tileHeights: number[] = [];
+  const rgbaChunks: Uint8Array[] = [];
+
+  try {
+    for (let i = 0; i < offsets.length; i++) {
+      if (isCancelled()) {
+        throw new CaptureCancelledError();
+      }
+      onProgress(`Capturing ${i + 1}/${offsets.length}…`);
+      const offset = offsets[i];
+      if (offset === undefined) {
+        throw new Error(`internal error: missing tile offset at index ${i}`);
+      }
+
+      const scrolled = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: scrollContainerBySelector,
+        args: [selector.attr, selector.value, offset],
+      });
+      if (!scrolled[0]?.result) {
+        throw new NoScrollContainerSelectedError();
+      }
+
+      const wait = rateLimiter.nextDelayMs(performance.now());
+      if (wait > 0) {
+        await sleep(wait);
+      }
+
+      let dataUrl: string;
+      try {
+        dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+        rateLimiter.recordSuccess(performance.now());
+      } catch (e) {
+        rateLimiter.recordError(performance.now());
+        throw e;
+      }
+
+      if (isCancelled()) {
+        throw new CaptureCancelledError();
+      }
+
+      const { width, height, rgba } = await decodeAndCropPngDataUrlToRgba(dataUrl, rect, rect.devicePixelRatio);
+      tileWidths.push(width);
+      tileHeights.push(height);
+      rgbaChunks.push(rgba);
+    }
+
+    onProgress("Processing…");
+    const concatenated = concatenateRgba(rgbaChunks);
+    const dpr = rect.devicePixelRatio;
+    const pngBytes = composeFullPagePng(
+      Float64Array.from(offsets),
+      metrics.clientWidth,
+      metrics.clientHeight,
+      dpr,
+      Uint32Array.from(tileWidths),
+      Uint32Array.from(tileHeights),
+      concatenated,
+    );
+
+    return {
+      pngBytes,
+      width: tileWidths[0] ?? 0,
+      height: Math.round(metrics.scrollHeight * dpr),
+    };
+  } finally {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: scrollContainerBySelector,
+      args: [selector.attr, selector.value, 0],
     });
   }
 }

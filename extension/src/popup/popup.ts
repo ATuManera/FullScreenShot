@@ -2,11 +2,12 @@
 // Copyright (c) 2026 ATuManera / Fernando Gallarday
 
 import { browser } from "../browser/index.js";
-import { PORT_NAME, type OutboundMessage } from "../background/messages.js";
+import { PORT_NAME, type CaptureMode, type OutboundMessage } from "../background/messages.js";
 
 const status = document.getElementById("status");
 const visibleBtn = document.getElementById("capture-visible") as HTMLButtonElement | null;
 const fullPageBtn = document.getElementById("capture-fullpage") as HTMLButtonElement | null;
+const scrollAreaBtn = document.getElementById("capture-scrollarea") as HTMLButtonElement | null;
 const cancelBtn = document.getElementById("cancel") as HTMLButtonElement | null;
 
 if (status) {
@@ -16,16 +17,24 @@ if (status) {
 function setBusy(busy: boolean): void {
   if (visibleBtn) visibleBtn.disabled = busy;
   if (fullPageBtn) fullPageBtn.disabled = busy;
+  if (scrollAreaBtn) scrollAreaBtn.disabled = busy;
   if (cancelBtn) cancelBtn.hidden = !busy;
 }
 
-function startCapture(mode: "visible" | "fullpage"): void {
+function startCapture(mode: CaptureMode): void {
   setBusy(true);
   if (status) {
     status.textContent = "Preparing…";
   }
 
   const port = chrome.runtime.connect({ name: PORT_NAME });
+
+  const finish = (text: string): void => {
+    if (status) status.textContent = text;
+    setBusy(false);
+    cancelBtn?.removeEventListener("click", onCancelClick);
+    port.disconnect();
+  };
 
   const onCancelClick = (): void => {
     port.postMessage({ type: "CANCEL" });
@@ -34,29 +43,22 @@ function startCapture(mode: "visible" | "fullpage"): void {
 
   port.onMessage.addListener((raw: unknown) => {
     const message = raw as OutboundMessage;
-    if (message.type === "PROGRESS") {
-      if (status) status.textContent = message.status;
-      return;
-    }
-    if (message.type === "DONE") {
-      if (status) status.textContent = "Done.";
-      setBusy(false);
-      cancelBtn?.removeEventListener("click", onCancelClick);
-      port.disconnect();
-      return;
-    }
-    if (message.type === "CANCELLED") {
-      if (status) status.textContent = "Cancelled — page restored.";
-      setBusy(false);
-      cancelBtn?.removeEventListener("click", onCancelClick);
-      port.disconnect();
-      return;
-    }
-    if (message.type === "ERROR") {
-      if (status) status.textContent = `Error: ${message.message}`;
-      setBusy(false);
-      cancelBtn?.removeEventListener("click", onCancelClick);
-      port.disconnect();
+    switch (message.type) {
+      case "PROGRESS":
+        if (status) status.textContent = message.status;
+        return;
+      case "DONE":
+        finish("Done.");
+        return;
+      case "CANCELLED":
+        finish("Cancelled — page restored.");
+        return;
+      case "NO_CONTAINER_SELECTED":
+        finish("No area selected.");
+        return;
+      case "ERROR":
+        finish(`Error: ${message.message}`);
+        return;
     }
   });
 
@@ -65,3 +67,4 @@ function startCapture(mode: "visible" | "fullpage"): void {
 
 visibleBtn?.addEventListener("click", () => startCapture("visible"));
 fullPageBtn?.addEventListener("click", () => startCapture("fullpage"));
+scrollAreaBtn?.addEventListener("click", () => startCapture("scrollarea"));

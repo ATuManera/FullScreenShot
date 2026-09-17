@@ -89,5 +89,7 @@ fn test() -> std::io::Result<bool> {
         ],
     )?;
     let ok_tests = run("cargo", &["test", "--workspace"])?;
-    Ok(ok_fmt && ok_clippy && ok_tests)
+    let ok_ts_typecheck = run_in("extension", "npm", &["run", "typecheck"])?;
+    let ok_ts_tests = run_in("extension", "npm", &["test"])?;
+    Ok(ok_fmt && ok_clippy && ok_tests && ok_ts_typecheck && ok_ts_tests)
 }

@@ -2,7 +2,8 @@
 // Copyright (c) 2026 ATuManera / Fernando Gallarday
 
 import { browser } from "../browser/index.js";
-import { CaptureCancelledError, captureFullPage, captureVisible, PageNotCapturableError } from "../capture/orchestrator.js";
+import { CaptureCancelledError, captureFullPage, captureScrollArea, captureVisible, PageNotCapturableError } from "../capture/orchestrator.js";
+import { enterSelectionMode, type ContainerSelector } from "../capture/selection.js";
 import { bytesToDataUrl } from "./bytes.js";
 import { parseInboundMessage, PORT_NAME, type CaptureMode, type OutboundMessage } from "./messages.js";
 
@@ -10,6 +11,33 @@ console.log(`FullScreenShot background service worker started (v${browser.getMan
 
 function randomResultId(): string {
   return crypto.randomUUID();
+}
+
+async function resolveResult(
+  mode: CaptureMode,
+  tabId: number,
+  send: (message: OutboundMessage) => void,
+  isCancelled: () => boolean,
+): Promise<Awaited<ReturnType<typeof captureVisible>> | null> {
+  if (mode === "visible") {
+    return captureVisible(tabId);
+  }
+  if (mode === "fullpage") {
+    return captureFullPage(tabId, (status) => send({ type: "PROGRESS", status }), isCancelled);
+  }
+
+  send({ type: "PROGRESS", status: "Click a scrollable area on the page (Esc to cancel)…" });
+  const [{ result: selector }] = (await chrome.scripting.executeScript({
+    target: { tabId },
+    func: enterSelectionMode,
+  })) as unknown as [{ result: ContainerSelector | null }];
+
+  if (!selector) {
+    send({ type: "NO_CONTAINER_SELECTED" });
+    return null;
+  }
+
+  return captureScrollArea(tabId, selector, (status) => send({ type: "PROGRESS", status }), isCancelled);
 }
 
 async function runCapture(mode: CaptureMode, port: chrome.runtime.Port, isCancelled: () => boolean): Promise<void> {
@@ -30,8 +58,10 @@ async function runCapture(mode: CaptureMode, port: chrome.runtime.Port, isCancel
     }
 
     send({ type: "PROGRESS", status: "Preparing…" });
-    const result =
-      mode === "visible" ? await captureVisible(tab.id) : await captureFullPage(tab.id, (status) => send({ type: "PROGRESS", status }), isCancelled);
+    const result = await resolveResult(mode, tab.id, send, isCancelled);
+    if (!result) {
+      return;
+    }
 
     send({ type: "PROGRESS", status: "Exporting…" });
     const resultId = randomResultId();
