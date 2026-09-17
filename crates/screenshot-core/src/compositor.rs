@@ -292,6 +292,59 @@ mod tests {
         assert_eq!(dims.height, 5);
     }
 
+    /// Explicit coverage for every DPR value the spec calls out by name
+    /// (section 12: "1.0, 1.25, 1.5, 1.75, 2.0, Retina") plus a
+    /// multi-tile composite at Retina (dpr 2.0), matching the MVP
+    /// acceptance criterion "Retina/DPR 2 → correct" (section 35).
+    #[test]
+    fn every_named_dpr_value_scales_output_height_correctly() {
+        let viewport = Size {
+            width: 2.0,
+            height: 4.0,
+        };
+        for (dpr, expected_height) in [(1.0, 4u32), (1.25, 5), (1.5, 6), (1.75, 7), (2.0, 8)] {
+            let plan = plan_with_offsets(&[0.0], viewport);
+            let tile_height = expected_height;
+            let (meta, rgba) = solid_tile(0, 2, tile_height, [7, 7, 7, 255]);
+            let tiles = [TileImage { meta, rgba: &rgba }];
+            let mut sink = CollectingSink { rows: Vec::new() };
+
+            let dims = compose_streaming(&plan, dpr, &tiles, &mut sink).unwrap();
+            assert_eq!(
+                dims.height, expected_height,
+                "dpr {dpr} should produce height {expected_height}"
+            );
+        }
+    }
+
+    #[test]
+    fn retina_dpr_two_multi_tile_composite_covers_full_content() {
+        let viewport = Size {
+            width: 2.0,
+            height: 4.0,
+        };
+        // Two CSS-px tiles at dpr 2.0: each tile image is 8 device-px tall.
+        let plan = plan_with_offsets(&[0.0, 4.0], viewport);
+        let (meta_a, rgba_a) = solid_tile(0, 4, 8, [1, 1, 1, 255]);
+        let (meta_b, rgba_b) = solid_tile(1, 4, 8, [2, 2, 2, 255]);
+        let tiles = [
+            TileImage {
+                meta: meta_a,
+                rgba: &rgba_a,
+            },
+            TileImage {
+                meta: meta_b,
+                rgba: &rgba_b,
+            },
+        ];
+        let mut sink = CollectingSink { rows: Vec::new() };
+
+        let dims = compose_streaming(&plan, 2.0, &tiles, &mut sink).unwrap();
+        // content height = 4 (offset) + 4 (viewport) = 8 CSS px -> 16 device px at dpr 2.0.
+        assert_eq!(dims.height, 16);
+        assert_eq!(dims.width, 4);
+    }
+
     #[test]
     fn rejects_tile_count_mismatch() {
         let viewport = Size {
