@@ -402,6 +402,7 @@ version = "0.1.0"
 dependencies = [
  "js-sys",
  "screenshot-core",
+ "screenshot-png",
  "wasm-bindgen",
 ]
 

@@ -31,6 +31,12 @@ fn run(cmd: &str, args: &[&str]) -> std::io::Result<bool> {
     Ok(status.success())
 }
 
+fn run_in(dir: &str, cmd: &str, args: &[&str]) -> std::io::Result<bool> {
+    println!("+ (cd {dir} && {cmd} {})", args.join(" "));
+    let status = Command::new(cmd).args(args).current_dir(dir).status()?;
+    Ok(status.success())
+}
+
 fn build() -> std::io::Result<bool> {
     let ok_workspace = run("cargo", &["build", "--workspace"])?;
     let ok_wasm = run(
@@ -43,7 +49,29 @@ fn build() -> std::io::Result<bool> {
             "wasm32-unknown-unknown",
         ],
     )?;
-    Ok(ok_workspace && ok_wasm)
+    let ok_wasm_pack = match run_in(
+        "crates/screenshot-wasm",
+        "wasm-pack",
+        &[
+            "build",
+            "--target",
+            "web",
+            "--out-dir",
+            "../../extension/wasm",
+            "--release",
+        ],
+    ) {
+        Ok(success) => success,
+        Err(e) => {
+            eprintln!(
+                "wasm-pack not runnable ({e}); install it with `cargo install wasm-pack` \
+                 to build the extension's WASM package"
+            );
+            false
+        }
+    };
+    let ok_chromium = run("browser/chromium/build.sh", &[])?;
+    Ok(ok_workspace && ok_wasm && ok_wasm_pack && ok_chromium)
 }
 
 fn test() -> std::io::Result<bool> {

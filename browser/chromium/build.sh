@@ -15,9 +15,17 @@ mkdir -p "$DIST_DIR"
 (cd "$ROOT_DIR/extension" && npm run build)
 
 cp "$ROOT_DIR/extension/manifest.base.json" "$DIST_DIR/manifest.json"
-mkdir -p "$DIST_DIR/popup" "$DIST_DIR/options" "$DIST_DIR/icons"
+mkdir -p "$DIST_DIR/popup" "$DIST_DIR/options" "$DIST_DIR/icons" "$DIST_DIR/wasm"
 cp "$ROOT_DIR/extension/src/popup/popup.html" "$DIST_DIR/popup/popup.html"
 cp "$ROOT_DIR/extension/src/popup/popup.css" "$DIST_DIR/popup/popup.css"
 cp "$ROOT_DIR/extension/src/options/options.html" "$DIST_DIR/options/options.html"
+
+if [ -d "$ROOT_DIR/extension/wasm" ] && [ -f "$ROOT_DIR/extension/wasm/screenshot_wasm_bg.wasm" ]; then
+  cp "$ROOT_DIR/extension/wasm/screenshot_wasm_bg.wasm" "$DIST_DIR/wasm/"
+  cp "$ROOT_DIR/extension/wasm/screenshot_wasm.js" "$DIST_DIR/wasm/"
+else
+  echo "warning: extension/wasm/ not found — run 'cargo xtask build' (or wasm-pack build" >&2
+  echo "         in crates/screenshot-wasm) before packaging for real use." >&2
+fi
 
 echo "dist/chromium assembled at $DIST_DIR"
