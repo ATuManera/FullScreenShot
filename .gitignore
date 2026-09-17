@@ -7,3 +7,4 @@ extension/dist
 extension/wasm
 *.wasm.map
 .DS_Store
+.playwright-mcp/

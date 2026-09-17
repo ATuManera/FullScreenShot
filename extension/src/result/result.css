@@ -1,0 +1,56 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #6b6b6b;
+  --accent: #2563eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --fg: #f2f2f2;
+    --muted: #a0a0a0;
+    --accent: #60a5fa;
+  }
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.5 system-ui, sans-serif;
+}
+
+h1 {
+  font-size: 18px;
+}
+
+#status {
+  color: var(--muted);
+}
+
+#preview-wrap {
+  max-width: 100%;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  overflow: auto;
+  max-height: 80vh;
+}
+
+#preview {
+  display: block;
+  max-width: 100%;
+}
+
+#download-link {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 10px 16px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
