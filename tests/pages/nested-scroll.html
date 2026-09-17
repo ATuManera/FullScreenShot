@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Nested scroll fixture</title>
+<style>
+  .outer { height: 400px; overflow-y: auto; border: 2px solid #333; margin: 16px; }
+  .inner-content { height: 1600px; padding: 8px; }
+  .row { height: 200px; border-bottom: 1px dashed #999; }
+</style>
+</head>
+<body>
+  <h1>Nested scroll container fixture</h1>
+  <div class="outer" id="scroll-container">
+    <div class="inner-content">
+      <div class="row">Row 1</div>
+      <div class="row">Row 2</div>
+      <div class="row">Row 3</div>
+      <div class="row">Row 4</div>
+      <div class="row">Row 5</div>
+      <div class="row">Row 6</div>
+      <div class="row">Row 7</div>
+      <div class="row">Row 8</div>
+    </div>
+  </div>
+</body>
+</html>

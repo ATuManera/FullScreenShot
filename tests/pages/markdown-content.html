@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Markdown content fixture</title></head>
+<body>
+  <article>
+    <h1>Markdown export fixture</h1>
+    <p>This page exercises the <strong>DOM-to-Markdown</strong> AST
+    extraction and writer: <em>emphasis</em>, a
+    <a href="https://example.com">safe link</a>, and a
+    <a href="javascript:alert(1)">dangerous link</a> that must be
+    sanitized.</p>
+    <h2>A list</h2>
+    <ul>
+      <li>First item</li>
+      <li>Second item</li>
+    </ul>
+    <h2>A table</h2>
+    <table>
+      <tr><th>Name</th><th>Value</th></tr>
+      <tr><td>Alpha</td><td>1</td></tr>
+      <tr><td>Beta</td><td>2</td></tr>
+    </table>
+    <h2>Code</h2>
+    <pre><code class="language-rust">fn main() { println!("hi"); }</code></pre>
+    <blockquote>A quoted paragraph.</blockquote>
+  </article>
+</body>
+</html>

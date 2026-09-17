@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Dynamic content fixture</title></head>
+<body>
+  <h1>Dynamic content fixture</h1>
+  <div id="dynamic-root">
+    <p>Initial content.</p>
+  </div>
+  <script>
+    // Deliberately mutates the DOM shortly after load to exercise
+    // "DOM mutation during capture" handling in P2/P5 tests.
+    setTimeout(() => {
+      const root = document.getElementById('dynamic-root');
+      const p = document.createElement('p');
+      p.textContent = 'Content added after 300ms.';
+      p.id = 'dynamic-added';
+      root.appendChild(p);
+    }, 300);
+  </script>
+</body>
+</html>

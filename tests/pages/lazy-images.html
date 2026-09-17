@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Lazy images fixture</title>
+<style>
+  .spacer { height: 900px; }
+  img { display: block; width: 200px; height: 150px; background: #ddd; }
+</style>
+</head>
+<body>
+  <h1>Lazy-loaded images fixture</h1>
+  <div class="spacer"></div>
+  <img id="lazy-1" loading="lazy" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='150'%3E%3Crect width='200' height='150' fill='%234477aa'/%3E%3C/svg%3E" alt="lazy 1" />
+  <div class="spacer"></div>
+  <img id="lazy-2" loading="lazy" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='150'%3E%3Crect width='200' height='150' fill='%23aa4477'/%3E%3C/svg%3E" alt="lazy 2" />
+  <div class="spacer"></div>
+</body>
+</html>

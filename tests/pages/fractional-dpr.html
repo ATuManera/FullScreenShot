@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Fractional DPR fixture</title>
+<style>
+  .marker { width: 133.33px; height: 133.33px; background: repeating-linear-gradient(45deg, #f00, #f00 10px, #fff 10px, #fff 20px); }
+  .block { height: 500px; }
+</style>
+</head>
+<body>
+  <h1>Fractional DPR fixture</h1>
+  <p>Rendered at fractional device-pixel-ratios (1.25, 1.5, 1.75) this
+  page's 133.33px markers exercise sub-pixel rounding in tile
+  offsets/crops.</p>
+  <div class="marker" id="marker-1"></div>
+  <div class="block"></div>
+  <div class="marker" id="marker-2"></div>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Sticky header fixture</title>
+<style>
+  header { position: sticky; top: 0; background: #222; color: #fff; padding: 12px; z-index: 10; }
+  main { padding: 16px; }
+  .block { height: 600px; border-bottom: 1px solid #ccc; }
+</style>
+</head>
+<body>
+  <header id="sticky-header">Sticky Header — should appear once in full-page output</header>
+  <main>
+    <div class="block">Block 1</div>
+    <div class="block">Block 2</div>
+    <div class="block">Block 3</div>
+    <div class="block">Block 4</div>
+  </main>
+</body>
+</html>

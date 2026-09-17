@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Fixed elements fixture</title>
+<style>
+  .fixed-top { position: fixed; top: 0; left: 0; right: 0; background: #003; color: #fff; padding: 8px; z-index: 20; }
+  .fixed-bottom { position: fixed; bottom: 0; left: 0; right: 0; background: #300; color: #fff; padding: 8px; z-index: 20; }
+  main { padding: 60px 16px; }
+  .block { height: 700px; border-bottom: 1px solid #ccc; }
+</style>
+</head>
+<body>
+  <div class="fixed-top" id="fixed-header">Fixed header</div>
+  <main>
+    <div class="block">Block 1</div>
+    <div class="block">Block 2</div>
+    <div class="block">Block 3</div>
+  </main>
+  <div class="fixed-bottom" id="fixed-footer">Fixed footer</div>
+</body>
+</html>
