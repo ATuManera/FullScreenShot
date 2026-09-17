@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/screenshot-core",
+    "crates/screenshot-png",
+    "crates/screenshot-pdf",
+    "crates/screenshot-md",
+    "crates/screenshot-wasm",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+authors = ["Fernando Gallarday <fernando@gallarday.net>"]
+repository = "https://github.com/ATuManera/FullScreenShot"
+
+[profile.release]
+opt-level = "s"
+lto = true

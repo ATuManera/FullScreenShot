@@ -1,0 +1,8 @@
+/target
+/dist
+/artifacts
+/node_modules
+extension/node_modules
+extension/dist
+*.wasm.map
+.DS_Store

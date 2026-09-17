@@ -1,0 +1,13 @@
+[package]
+name = "screenshot-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Capture geometry, planning and validation core for FullScreenShot"
+
+[dependencies]
+
+[dev-dependencies]
+proptest = "1"
