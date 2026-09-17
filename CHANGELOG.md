@@ -28,6 +28,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `cargo xtask test` (0 vulnerabilities, all licenses allow-listed), a
   hostile-content DOM fixture verified in a real browser, and hostile/
   fuzzed runtime-message tests including a prototype-pollution check.
+- P6: release-candidate packaging (`dist/chromium/`,
+  `artifacts/fullscreen-shot-chromium-0.1.0.zip`), explicit DPR 1.5/
+  1.75/2.0 (Retina) compositor test coverage, and a systematic pass
+  through every MVP acceptance criterion in the project brief.
+
+### Known gaps (tracked, not silently ignored)
+
+- No persistent `@playwright/test` suite runnable via `npm test`/CI yet
+  — browser verification so far was done interactively (real
+  assertions, not manual screenshot inspection) and is documented in
+  the P1/P2/P3/P5 design specs, but isn't yet a committed, repeatable
+  test suite. See the P6 spec for why this wasn't attempted blind in
+  this particular environment.
+- Safari packaging is prepared (compatibility analysis, conversion
+  script) but not run — this environment has no full Xcode install.
 
 - P0 Foundation: Rust workspace (`screenshot-core`, `screenshot-png`,
   `screenshot-pdf`, `screenshot-md`, `screenshot-wasm`) with capture
