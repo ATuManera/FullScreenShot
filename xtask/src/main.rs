@@ -98,7 +98,47 @@ fn test() -> std::io::Result<bool> {
     let ok_ts_typecheck = run_in("extension", "npm", &["run", "typecheck"])?;
     let ok_ts_tests = run_in("extension", "npm", &["test"])?;
     let ok_versions = check_versions_match();
-    Ok(ok_fmt && ok_clippy && ok_tests && ok_ts_typecheck && ok_ts_tests && ok_versions)
+    let ok_audit = run_optional_security_tool(
+        "cargo",
+        &["audit"],
+        "cargo-audit",
+        "cargo install cargo-audit",
+    );
+    let ok_deny = run_optional_security_tool(
+        "cargo",
+        &["deny", "check"],
+        "cargo-deny",
+        "cargo install cargo-deny",
+    );
+    Ok(ok_fmt
+        && ok_clippy
+        && ok_tests
+        && ok_ts_typecheck
+        && ok_ts_tests
+        && ok_versions
+        && ok_audit
+        && ok_deny)
+}
+
+/// Runs a security-scanning subcommand that may not be installed. Unlike
+/// the rest of the gate, a *missing* tool only warns (so `cargo xtask
+/// test` still works for a fresh clone without extra installs) — but a
+/// tool that IS installed and finds a real problem still fails the gate.
+fn run_optional_security_tool(
+    cmd: &str,
+    args: &[&str],
+    tool_name: &str,
+    install_hint: &str,
+) -> bool {
+    match run(cmd, args) {
+        Ok(success) => success,
+        Err(_) => {
+            eprintln!(
+                "warning: `{tool_name}` not installed — skipping. Install with `{install_hint}`."
+            );
+            true
+        }
+    }
 }
 
 fn package(target: &str) -> std::io::Result<bool> {

@@ -39,3 +39,14 @@ jobs:
       - run: npm install
       - run: npm run typecheck
       - run: npm test
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo audit (advisory database)
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: cargo deny (licenses, advisories, bans, sources)
+        uses: EmbarkStudios/cargo-deny-action@v2

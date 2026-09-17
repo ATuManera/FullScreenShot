@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Hostile content fixture</title></head>
+<body>
+  <article>
+    <h1>Hostile content fixture</h1>
+    <p>Exercises the Markdown extractor and sanitizer against
+    deliberately adversarial markup — none of this should ever execute,
+    and dangerous URLs must be stripped while surrounding text survives.</p>
+
+    <script>window.__fss_hostile_script_ran = true;</script>
+    <style>body::before { content: "should never affect markdown output"; }</style>
+
+    <p>
+      A <a href="javascript:alert(document.cookie)">javascript: link</a>,
+      a <a href="data:text/html,<script>alert(1)</script>">data: HTML link</a>,
+      a <a href="  	java
+script:alert(1)">whitespace-obfuscated javascript: link</a>,
+      and a <a href="https://example.com/safe">perfectly safe link</a>.
+    </p>
+
+    <p>
+      An image with a hostile src:
+      <img src="javascript:alert(1)" alt="hostile image alt text" />
+      and one with a hostile data URL:
+      <img src="data:text/html,<script>alert(1)</script>" alt="hostile data url alt text" />
+      and one that is legitimately fine:
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="legit inline svg" />
+    </p>
+
+    <p>Attribute-based event handler that must never fire from static extraction:
+      <span onclick="window.__fss_hostile_onclick_ran = true">click me (should stay inert)</span>
+    </p>
+
+    <iframe src="https://example.com/should-be-ignored" title="hostile iframe"></iframe>
+    <canvas id="hostile-canvas" width="10" height="10"></canvas>
+
+    <blockquote>
+      <p>Nested <strong>formatting <em>inside</em> a blockquote</strong> with a
+      <a href="javascript:void(0)">dangerous link inside a blockquote</a>.</p>
+    </blockquote>
+  </article>
+</body>
+</html>
