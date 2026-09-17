@@ -14,6 +14,35 @@
       <button type="button" id="capture-fullpage">Capture Full Page</button>
       <button type="button" id="capture-scrollarea">Select Scroll Area</button>
     </nav>
+    <div class="field">
+      <label for="export-format">Image export</label>
+      <select id="export-format">
+        <option value="png" selected>PNG</option>
+        <option value="pdf">PDF</option>
+      </select>
+    </div>
+    <div class="field" id="pdf-options" hidden>
+      <label for="pdf-page-size">PDF page size</label>
+      <select id="pdf-page-size">
+        <option value="auto" selected>Auto (original scale)</option>
+        <option value="a4">A4</option>
+        <option value="letter">Letter</option>
+      </select>
+      <label for="pdf-orientation">Orientation</label>
+      <select id="pdf-orientation">
+        <option value="portrait" selected>Portrait</option>
+        <option value="landscape">Landscape</option>
+      </select>
+    </div>
+    <hr />
+    <div class="field">
+      <label for="markdown-mode">Markdown mode</label>
+      <select id="markdown-mode">
+        <option value="article" selected>Article</option>
+        <option value="full-dom">Full DOM</option>
+      </select>
+    </div>
+    <button type="button" id="export-markdown">Export Markdown</button>
     <button type="button" id="cancel" hidden>Cancel</button>
     <a href="../options/options.html" target="_blank" rel="noopener">Settings / About</a>
   </main>

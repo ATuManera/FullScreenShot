@@ -3,13 +3,38 @@
 
 const statusEl = document.getElementById("status");
 const previewWrap = document.getElementById("preview-wrap");
-const previewImg = document.getElementById("preview") as HTMLImageElement | null;
+const imagePreview = document.getElementById("image-preview") as HTMLImageElement | null;
+const pdfPreview = document.getElementById("pdf-preview") as HTMLIFrameElement | null;
+const textPreview = document.getElementById("text-preview") as HTMLPreElement | null;
 const downloadLink = document.getElementById("download-link") as HTMLAnchorElement | null;
 
 function setStatus(text: string): void {
   if (statusEl) {
     statusEl.textContent = text;
   }
+}
+
+function mimeTypeOf(dataUrl: string): string {
+  const match = /^data:([^;,]+)[;,]/.exec(dataUrl);
+  return match?.[1] ?? "application/octet-stream";
+}
+
+function filenameFor(mimeType: string): string {
+  switch (mimeType) {
+    case "image/png":
+      return "fullscreenshot.png";
+    case "application/pdf":
+      return "fullscreenshot.pdf";
+    case "text/markdown":
+      return "fullscreenshot.md";
+    default:
+      return "fullscreenshot.bin";
+  }
+}
+
+async function dataUrlToText(dataUrl: string): Promise<string> {
+  const res = await fetch(dataUrl);
+  return res.text();
 }
 
 async function main(): Promise<void> {
@@ -27,11 +52,25 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (previewImg && previewWrap && downloadLink) {
-    previewImg.src = dataUrl;
+  const mimeType = mimeTypeOf(dataUrl);
+
+  if (previewWrap && downloadLink) {
     previewWrap.hidden = false;
-    downloadLink.href = dataUrl;
     downloadLink.hidden = false;
+    downloadLink.href = dataUrl;
+    downloadLink.download = filenameFor(mimeType);
+    downloadLink.textContent = `Download ${filenameFor(mimeType).split(".").pop()?.toUpperCase()}`;
+
+    if (mimeType === "image/png" && imagePreview) {
+      imagePreview.src = dataUrl;
+      imagePreview.hidden = false;
+    } else if (mimeType === "application/pdf" && pdfPreview) {
+      pdfPreview.src = dataUrl;
+      pdfPreview.hidden = false;
+    } else if (mimeType === "text/markdown" && textPreview) {
+      textPreview.textContent = await dataUrlToText(dataUrl);
+      textPreview.hidden = false;
+    }
   }
   setStatus("Capture complete.");
 

@@ -8,7 +8,7 @@
 // not present under extension/src/, so this file is what lets `tsc`
 // typecheck imports of "../wasm/screenshot_wasm.js" against the real
 // exported API. Keep this in sync with
-// crates/screenshot-wasm/src/{png,rate_limiter,tiles}.rs.
+// crates/screenshot-wasm/src/{png,pdf,markdown,rate_limiter,tiles}.rs.
 
 export class RateLimiter {
   free(): void;
@@ -28,6 +28,20 @@ export function composeFullPagePng(
   tile_heights: Uint32Array,
   tile_rgba_concat: Uint8Array,
 ): Uint8Array;
+
+export function composeFullPagePdf(
+  offsets: Float64Array,
+  viewport_width: number,
+  viewport_height: number,
+  dpr: number,
+  tile_widths: Uint32Array,
+  tile_heights: Uint32Array,
+  tile_rgba_concat: Uint8Array,
+  page_size: "a4" | "letter" | "auto",
+  orientation: "portrait" | "landscape",
+): Uint8Array;
+
+export function markdownFromJson(json: string, title: string, source: string, captured_at: string): string;
 
 export function planTiles(viewport_height: number, content_height: number, overlap: number): number[];
 

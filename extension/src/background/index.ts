@@ -2,10 +2,10 @@
 // Copyright (c) 2026 ATuManera / Fernando Gallarday
 
 import { browser } from "../browser/index.js";
-import { CaptureCancelledError, captureFullPage, captureScrollArea, captureVisible, PageNotCapturableError } from "../capture/orchestrator.js";
+import { CaptureCancelledError, captureFullPage, captureScrollArea, captureVisible, exportMarkdown, PageNotCapturableError } from "../capture/orchestrator.js";
 import { enterSelectionMode, type ContainerSelector } from "../capture/selection.js";
 import { bytesToDataUrl } from "./bytes.js";
-import { parseInboundMessage, PORT_NAME, type CaptureMode, type OutboundMessage } from "./messages.js";
+import { parseInboundMessage, PORT_NAME, type OutboundMessage, type StartCaptureMessage } from "./messages.js";
 
 console.log(`FullScreenShot background service worker started (v${browser.getManifestVersion()})`);
 
@@ -13,17 +13,26 @@ function randomResultId(): string {
   return crypto.randomUUID();
 }
 
-async function resolveResult(
-  mode: CaptureMode,
-  tabId: number,
-  send: (message: OutboundMessage) => void,
-  isCancelled: () => boolean,
-): Promise<Awaited<ReturnType<typeof captureVisible>> | null> {
-  if (mode === "visible") {
+interface ResolvedExport {
+  bytes: Uint8Array;
+  mimeType: string;
+  width: number;
+  height: number;
+}
+
+async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (message: OutboundMessage) => void, isCancelled: () => boolean): Promise<ResolvedExport | null> {
+  if (msg.mode === "visible") {
     return captureVisible(tabId);
   }
-  if (mode === "fullpage") {
-    return captureFullPage(tabId, (status) => send({ type: "PROGRESS", status }), isCancelled);
+  if (msg.mode === "fullpage") {
+    return captureFullPage(tabId, (status) => send({ type: "PROGRESS", status }), isCancelled, "fast", msg.exportFormat, {
+      pageSize: msg.pdfPageSize,
+      orientation: msg.pdfOrientation,
+    });
+  }
+  if (msg.mode === "markdown") {
+    const result = await exportMarkdown(tabId, msg.markdownMode);
+    return { ...result, width: 0, height: 0 };
   }
 
   send({ type: "PROGRESS", status: "Click a scrollable area on the page (Esc to cancel)…" });
@@ -37,10 +46,13 @@ async function resolveResult(
     return null;
   }
 
-  return captureScrollArea(tabId, selector, (status) => send({ type: "PROGRESS", status }), isCancelled);
+  return captureScrollArea(tabId, selector, (status) => send({ type: "PROGRESS", status }), isCancelled, msg.exportFormat, {
+    pageSize: msg.pdfPageSize,
+    orientation: msg.pdfOrientation,
+  });
 }
 
-async function runCapture(mode: CaptureMode, port: chrome.runtime.Port, isCancelled: () => boolean): Promise<void> {
+async function runCapture(msg: StartCaptureMessage, port: chrome.runtime.Port, isCancelled: () => boolean): Promise<void> {
   const send = (message: OutboundMessage): void => {
     try {
       port.postMessage(message);
@@ -58,14 +70,14 @@ async function runCapture(mode: CaptureMode, port: chrome.runtime.Port, isCancel
     }
 
     send({ type: "PROGRESS", status: "Preparing…" });
-    const result = await resolveResult(mode, tab.id, send, isCancelled);
+    const result = await resolveResult(msg, tab.id, send, isCancelled);
     if (!result) {
       return;
     }
 
     send({ type: "PROGRESS", status: "Exporting…" });
     const resultId = randomResultId();
-    const dataUrl = bytesToDataUrl(result.pngBytes, "image/png");
+    const dataUrl = bytesToDataUrl(result.bytes, result.mimeType);
     await chrome.storage.session.set({ [resultId]: dataUrl });
 
     await chrome.tabs.create({ url: chrome.runtime.getURL(`result/result.html?id=${encodeURIComponent(resultId)}`) });
@@ -100,6 +112,6 @@ chrome.runtime.onConnect.addListener((port) => {
       cancelled = true;
       return;
     }
-    void runCapture(message.mode, port, () => cancelled);
+    void runCapture(message, port, () => cancelled);
   });
 });

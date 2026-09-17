@@ -50,3 +50,36 @@ button {
 button:disabled {
   opacity: 0.5;
 }
+
+button#export-markdown {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.field label {
+  color: var(--muted);
+}
+
+.field select {
+  font: inherit;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--muted);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--muted);
+  margin: 12px 0;
+  opacity: 0.4;
+}

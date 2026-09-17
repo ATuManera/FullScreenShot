@@ -11,11 +11,19 @@
  */
 export const PORT_NAME = "fullscreenshot-capture";
 
-export type CaptureMode = "visible" | "fullpage" | "scrollarea";
+export type CaptureMode = "visible" | "fullpage" | "scrollarea" | "markdown";
+export type ExportFormat = "png" | "pdf";
+export type PdfPageSize = "a4" | "letter" | "auto";
+export type PdfOrientation = "portrait" | "landscape";
+export type MarkdownExportMode = "article" | "full-dom";
 
 export interface StartCaptureMessage {
   type: "START_CAPTURE";
   mode: CaptureMode;
+  exportFormat: ExportFormat;
+  pdfPageSize: PdfPageSize;
+  pdfOrientation: PdfOrientation;
+  markdownMode: MarkdownExportMode;
 }
 
 export interface CancelMessage {
@@ -52,7 +60,23 @@ export interface NoContainerSelectedMessage {
 export type OutboundMessage = ProgressMessage | DoneMessage | CancelledMessage | ErrorMessage | NoContainerSelectedMessage;
 
 function isCaptureMode(value: unknown): value is CaptureMode {
-  return value === "visible" || value === "fullpage" || value === "scrollarea";
+  return value === "visible" || value === "fullpage" || value === "scrollarea" || value === "markdown";
+}
+
+function isExportFormat(value: unknown): value is ExportFormat {
+  return value === "png" || value === "pdf";
+}
+
+function isPdfPageSize(value: unknown): value is PdfPageSize {
+  return value === "a4" || value === "letter" || value === "auto";
+}
+
+function isPdfOrientation(value: unknown): value is PdfOrientation {
+  return value === "portrait" || value === "landscape";
+}
+
+function isMarkdownExportMode(value: unknown): value is MarkdownExportMode {
+  return value === "article" || value === "full-dom";
 }
 
 /** Validates an untrusted message received on the capture port. */
@@ -60,14 +84,18 @@ export function parseInboundMessage(raw: unknown): InboundMessage | null {
   if (typeof raw !== "object" || raw === null || !("type" in raw)) {
     return null;
   }
-  const candidate = raw as { type: unknown };
+  const candidate = raw as Record<string, unknown>;
   if (candidate.type === "CANCEL") {
     return { type: "CANCEL" };
   }
-  if (candidate.type === "START_CAPTURE" && "mode" in raw) {
-    const mode = (raw as { mode: unknown }).mode;
-    if (isCaptureMode(mode)) {
-      return { type: "START_CAPTURE", mode };
+  if (candidate.type === "START_CAPTURE") {
+    const mode = candidate.mode;
+    const exportFormat = candidate.exportFormat ?? "png";
+    const pdfPageSize = candidate.pdfPageSize ?? "auto";
+    const pdfOrientation = candidate.pdfOrientation ?? "portrait";
+    const markdownMode = candidate.markdownMode ?? "article";
+    if (isCaptureMode(mode) && isExportFormat(exportFormat) && isPdfPageSize(pdfPageSize) && isPdfOrientation(pdfOrientation) && isMarkdownExportMode(markdownMode)) {
+      return { type: "START_CAPTURE", mode, exportFormat, pdfPageSize, pdfOrientation, markdownMode };
     }
   }
   return null;

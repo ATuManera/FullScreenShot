@@ -11,6 +11,7 @@
 import { isCapturableUrl, measurePage, type PageMetrics } from "./geometry.js";
 import { hideFixedAndStickyElements, restoreFixedAndStickyElements } from "./injectable.js";
 import { classifyPrescrollOutcome, DEFAULT_MAX_PRESCROLL_PASSES } from "./lazy.js";
+import { extractMarkdownAst, type MarkdownMode } from "./markdown.js";
 import {
   boundingRectBySelector,
   measureContainerBySelector,
@@ -18,7 +19,7 @@ import {
   type ContainerSelector,
 } from "./selection.js";
 import { begin, restore, suppressSmoothScroll, type PageStateSnapshot } from "./state.js";
-import initWasm, { composeFullPagePng, planTiles, RateLimiter } from "../wasm/screenshot_wasm.js";
+import initWasm, { composeFullPagePdf, composeFullPagePng, markdownFromJson, planTiles, RateLimiter } from "../wasm/screenshot_wasm.js";
 
 const DEFAULT_TILE_OVERLAP_CSS_PX = 40;
 /**
@@ -31,6 +32,12 @@ const DEFAULT_TILE_OVERLAP_CSS_PX = 40;
 const MAX_TILES_SAFETY_LIMIT = 500;
 
 export type LazyMode = "fast" | "reliable";
+export type ImageExportFormat = "png" | "pdf";
+export interface PdfExportOptions {
+  pageSize: "a4" | "letter" | "auto";
+  orientation: "portrait" | "landscape";
+}
+const DEFAULT_PDF_OPTIONS: PdfExportOptions = { pageSize: "auto", orientation: "portrait" };
 
 export class CaptureCancelledError extends Error {
   constructor() {
@@ -68,9 +75,47 @@ export class PossiblyInfiniteScrollError extends Error {
 }
 
 export interface CaptureResult {
-  pngBytes: Uint8Array;
+  bytes: Uint8Array;
+  mimeType: string;
   width: number;
   height: number;
+}
+
+function encodeComposite(
+  format: ImageExportFormat,
+  pdfOptions: PdfExportOptions,
+  offsets: number[],
+  contentWidth: number,
+  contentHeight: number,
+  dpr: number,
+  tileWidths: number[],
+  tileHeights: number[],
+  rgba: Uint8Array,
+): { bytes: Uint8Array; mimeType: string } {
+  if (format === "pdf") {
+    const bytes = composeFullPagePdf(
+      Float64Array.from(offsets),
+      contentWidth,
+      contentHeight,
+      dpr,
+      Uint32Array.from(tileWidths),
+      Uint32Array.from(tileHeights),
+      rgba,
+      pdfOptions.pageSize,
+      pdfOptions.orientation,
+    );
+    return { bytes, mimeType: "application/pdf" };
+  }
+  const bytes = composeFullPagePng(
+    Float64Array.from(offsets),
+    contentWidth,
+    contentHeight,
+    dpr,
+    Uint32Array.from(tileWidths),
+    Uint32Array.from(tileHeights),
+    rgba,
+  );
+  return { bytes, mimeType: "image/png" };
 }
 
 export type ProgressCallback = (status: string) => void;
@@ -167,8 +212,8 @@ export async function captureVisible(tabId: number): Promise<CaptureResult> {
   const tab = await getCapturableTab(tabId);
   const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
   const { width, height } = await decodePngDataUrlToRgba(dataUrl);
-  const pngBytes = await dataUrlToBytes(dataUrl);
-  return { pngBytes, width, height };
+  const bytes = await dataUrlToBytes(dataUrl);
+  return { bytes, mimeType: "image/png", width, height };
 }
 
 /**
@@ -183,6 +228,8 @@ export async function captureFullPage(
   onProgress: ProgressCallback,
   isCancelled: () => boolean,
   lazyMode: LazyMode = "fast",
+  exportFormat: ImageExportFormat = "png",
+  pdfOptions: PdfExportOptions = DEFAULT_PDF_OPTIONS,
 ): Promise<CaptureResult> {
   await ensureWasm();
   const tab = await getCapturableTab(tabId);
@@ -265,18 +312,21 @@ export async function captureFullPage(
     const concatenated = concatenateRgba(rgbaChunks);
 
     const dpr = metrics.devicePixelRatio;
-    const pngBytes = composeFullPagePng(
-      Float64Array.from(offsets),
+    const { bytes, mimeType } = encodeComposite(
+      exportFormat,
+      pdfOptions,
+      offsets,
       metrics.viewportWidth,
       metrics.viewportHeight,
       dpr,
-      Uint32Array.from(tileWidths),
-      Uint32Array.from(tileHeights),
+      tileWidths,
+      tileHeights,
       concatenated,
     );
 
     return {
-      pngBytes,
+      bytes,
+      mimeType,
       width: tileWidths[0] ?? 0,
       height: Math.round(metrics.scrollHeight * dpr),
     };
@@ -343,6 +393,8 @@ export async function captureScrollArea(
   selector: ContainerSelector,
   onProgress: ProgressCallback,
   isCancelled: () => boolean,
+  exportFormat: ImageExportFormat = "png",
+  pdfOptions: PdfExportOptions = DEFAULT_PDF_OPTIONS,
 ): Promise<CaptureResult> {
   await ensureWasm();
   const tab = await getCapturableTab(tabId);
@@ -423,18 +475,21 @@ export async function captureScrollArea(
     onProgress("Processing…");
     const concatenated = concatenateRgba(rgbaChunks);
     const dpr = rect.devicePixelRatio;
-    const pngBytes = composeFullPagePng(
-      Float64Array.from(offsets),
+    const { bytes, mimeType } = encodeComposite(
+      exportFormat,
+      pdfOptions,
+      offsets,
       metrics.clientWidth,
       metrics.clientHeight,
       dpr,
-      Uint32Array.from(tileWidths),
-      Uint32Array.from(tileHeights),
+      tileWidths,
+      tileHeights,
       concatenated,
     );
 
     return {
-      pngBytes,
+      bytes,
+      mimeType,
       width: tileWidths[0] ?? 0,
       height: Math.round(metrics.scrollHeight * dpr),
     };
@@ -445,4 +500,31 @@ export async function captureScrollArea(
       args: [selector.attr, selector.value, 0],
     });
   }
+}
+
+export interface MarkdownExportResult {
+  bytes: Uint8Array;
+  mimeType: string;
+}
+
+/**
+ * Export Markdown: extracts a semantic AST directly from the live DOM
+ * (no scrolling or tiling — unlike the image capture modes, this reads
+ * the whole document as it already is) and renders it via the same
+ * sanitizing Rust writer used for PNG/PDF's shared core.
+ */
+export async function exportMarkdown(tabId: number, mode: MarkdownMode): Promise<MarkdownExportResult> {
+  await ensureWasm();
+  const tab = await getCapturableTab(tabId);
+
+  const [{ result: ast }] = (await chrome.scripting.executeScript({
+    target: { tabId },
+    func: extractMarkdownAst,
+    args: [mode],
+  })) as unknown as [{ result: { children: unknown[] } }];
+
+  const json = JSON.stringify(ast);
+  const md = markdownFromJson(json, tab.title ?? "", tab.url ?? "", new Date().toISOString());
+  const bytes = new TextEncoder().encode(md);
+  return { bytes, mimeType: "text/markdown" };
 }
