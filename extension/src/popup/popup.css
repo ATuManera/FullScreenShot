@@ -1,0 +1,52 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #6b6b6b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a1a;
+    --fg: #f2f2f2;
+    --muted: #a0a0a0;
+  }
+}
+
+body {
+  margin: 0;
+  padding: 12px;
+  width: 260px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.4 system-ui, sans-serif;
+}
+
+h1 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+#status {
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+button {
+  font: inherit;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--muted);
+  background: transparent;
+  color: var(--fg);
+}
+
+button:disabled {
+  opacity: 0.5;
+}

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "FullScreenShot",
+  "version": "0.1.0",
+  "description": "Privacy-first full-page screenshot capture. 100% local. No telemetry.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "background": {
+    "service_worker": "background/index.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "FullScreenShot"
+  },
+  "options_page": "options/options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

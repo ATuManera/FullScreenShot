@@ -1,0 +1,14 @@
+{
+  "name": "fullscreenshot-extension",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MPL-2.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/chrome": "^0.0.280"
+  }
+}
