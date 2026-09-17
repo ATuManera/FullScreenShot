@@ -3,7 +3,8 @@
 
 pub mod ast;
 pub mod sanitizer;
+pub mod untrusted;
 pub mod writer;
 
 pub use ast::{Document, Node};
-pub use writer::write_markdown;
+pub use writer::{write_markdown, DocumentMeta};

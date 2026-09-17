@@ -11,6 +11,8 @@ This file is updated whenever a new runtime dependency is added.
 | [`proptest`](https://crates.io/crates/proptest) | MIT OR Apache-2.0 | Property-based testing (dev-dependency only, not shipped) |
 | [`pdf-writer`](https://crates.io/crates/pdf-writer) | MIT OR Apache-2.0 | Low-level PDF document generation (`screenshot-pdf`) |
 | [`flate2`](https://crates.io/crates/flate2) | MIT OR Apache-2.0 | DEFLATE/zlib compression for PDF image streams (`screenshot-pdf`) |
+| [`serde`](https://crates.io/crates/serde) | MIT OR Apache-2.0 | (De)serialization framework for the Markdown AST JSON boundary (`screenshot-md`) |
+| [`serde_json`](https://crates.io/crates/serde_json) | MIT OR Apache-2.0 | JSON parsing for the untrusted Markdown AST boundary (`screenshot-md`) |
 
 None of the above components are modified from their published form;
 they are used as unmodified dependencies via Cargo/crates.io. No
