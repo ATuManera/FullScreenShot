@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `safari-web-extension-converter` wrapper script, `cargo xtask package
   chromium|safari`, and a version-consistency check across Cargo.toml/
   manifest/package.json.
+- P5: security hardening — `cargo audit`/`cargo deny` in CI and
+  `cargo xtask test` (0 vulnerabilities, all licenses allow-listed), a
+  hostile-content DOM fixture verified in a real browser, and hostile/
+  fuzzed runtime-message tests including a prototype-pollution check.
 
 - P0 Foundation: Rust workspace (`screenshot-core`, `screenshot-png`,
   `screenshot-pdf`, `screenshot-md`, `screenshot-wasm`) with capture
