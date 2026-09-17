@@ -61,8 +61,11 @@ unpacked", select `dist/chromium/` (built by `browser/chromium/build.sh`).
 **Edge:** open `edge://extensions`, enable Developer mode, "Load
 unpacked", select `dist/chromium/`.
 
-**Safari:** Safari packaging lands in a later phase (P4); see the
-roadmap below.
+**Safari:** run `cargo xtask package safari` on a Mac with full Xcode
+installed (the Command Line Tools alone are not enough) to generate an
+Xcode project via `xcrun safari-web-extension-converter`, then open it
+in Xcode to build/sign/run. See `browser/safari/README.md` for exactly
+what is and isn't verified about Safari compatibility.
 
 ## Privacy & Security
 

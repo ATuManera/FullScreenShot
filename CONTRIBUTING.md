@@ -19,6 +19,9 @@ Thank you for your interest in contributing.
 2. Install Node.js (for the extension's TypeScript typecheck).
 3. Build everything: `cargo xtask build`
 4. Run tests: `cargo xtask test`
+5. Package Chrome/Edge: `cargo xtask package chromium` (writes
+   `artifacts/fullscreen-shot-chromium-<version>.zip`)
+6. Package Safari (macOS with full Xcode only): `cargo xtask package safari`
 
 ## Before opening a pull request
 

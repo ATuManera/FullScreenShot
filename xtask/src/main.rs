@@ -2,6 +2,8 @@
 // Copyright (c) 2026 ATuManera / Fernando Gallarday
 
 use std::env;
+use std::fs;
+use std::path::Path;
 use std::process::{Command, ExitCode};
 
 fn main() -> ExitCode {
@@ -9,8 +11,12 @@ fn main() -> ExitCode {
     let result = match task.as_str() {
         "build" => build(),
         "test" => test(),
+        "package" => {
+            let target = env::args().nth(2).unwrap_or_default();
+            package(&target)
+        }
         other => {
-            eprintln!("unknown xtask '{other}'. Available: build, test");
+            eprintln!("unknown xtask '{other}'. Available: build, test, package <chromium|safari>");
             return ExitCode::FAILURE;
         }
     };
@@ -91,5 +97,102 @@ fn test() -> std::io::Result<bool> {
     let ok_tests = run("cargo", &["test", "--workspace"])?;
     let ok_ts_typecheck = run_in("extension", "npm", &["run", "typecheck"])?;
     let ok_ts_tests = run_in("extension", "npm", &["test"])?;
-    Ok(ok_fmt && ok_clippy && ok_tests && ok_ts_typecheck && ok_ts_tests)
+    let ok_versions = check_versions_match();
+    Ok(ok_fmt && ok_clippy && ok_tests && ok_ts_typecheck && ok_ts_tests && ok_versions)
+}
+
+fn package(target: &str) -> std::io::Result<bool> {
+    match target {
+        "chromium" => package_chromium(),
+        "safari" => run("browser/safari/convert.sh", &[]),
+        other => {
+            eprintln!("unknown package target '{other}'. Available: chromium, safari");
+            Ok(false)
+        }
+    }
+}
+
+/// Reads `version = "..."` from the workspace `[workspace.package]`
+/// table in the top-level Cargo.toml — the single source of truth every
+/// other version string (extension manifest, extension package.json)
+/// must match, per the project's "no version drift" requirement.
+fn workspace_version() -> std::io::Result<String> {
+    let content = fs::read_to_string("Cargo.toml")?;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("version = \"") {
+            if let Some(version) = rest.strip_suffix('"') {
+                return Ok(version.to_string());
+            }
+        }
+    }
+    Err(std::io::Error::other(
+        "could not find version = \"...\" in Cargo.toml",
+    ))
+}
+
+fn check_versions_match() -> bool {
+    let workspace = match workspace_version() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("version check failed: {e}");
+            return false;
+        }
+    };
+
+    let mut ok = true;
+    for (path, needle_prefix) in [
+        ("extension/manifest.base.json", "\"version\": \""),
+        ("extension/package.json", "\"version\": \""),
+    ] {
+        match fs::read_to_string(path) {
+            Ok(content) => {
+                let found = content.lines().find_map(|line| {
+                    let trimmed = line.trim();
+                    trimmed
+                        .strip_prefix(needle_prefix)
+                        .and_then(|rest| rest.split('"').next())
+                });
+                match found {
+                    Some(v) if v == workspace => {
+                        println!("version OK: {path} = {v}");
+                    }
+                    Some(v) => {
+                        eprintln!("version MISMATCH: {path} has \"{v}\", workspace Cargo.toml has \"{workspace}\"");
+                        ok = false;
+                    }
+                    None => {
+                        eprintln!("version check failed: no \"version\" field found in {path}");
+                        ok = false;
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("version check failed: could not read {path}: {e}");
+                ok = false;
+            }
+        }
+    }
+    ok
+}
+
+fn package_chromium() -> std::io::Result<bool> {
+    if !Path::new("dist/chromium").exists() {
+        eprintln!("dist/chromium not found — run 'cargo xtask build' first.");
+        return Ok(false);
+    }
+    let version = workspace_version()?;
+    fs::create_dir_all("artifacts")?;
+    let zip_name = format!("fullscreen-shot-chromium-{version}.zip");
+    let zip_path = format!("artifacts/{zip_name}");
+    let _ = fs::remove_file(&zip_path);
+    let ok = run_in(
+        "dist/chromium",
+        "zip",
+        &["-r", &format!("../../{zip_path}"), "."],
+    )?;
+    if ok {
+        println!("packaged {zip_path}");
+    }
+    Ok(ok)
 }
