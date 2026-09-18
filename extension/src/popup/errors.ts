@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: MPL-2.0-no-copyleft-exception
+// Copyright (c) 2026 ATuManera / Fernando Gallarday
+
+/**
+ * Centralized browser-error -> user-message mapper (UX-P1 6.9 / UX-P3
+ * 8.6). Raw Chrome/WebExtension exceptions ("The extensions gallery
+ * cannot be scripted.", executeScript permission errors, stack traces)
+ * must never reach ordinary users — this is the single place that
+ * decides what a human sees, and it always has a safe fallback.
+ * Pure/testable: takes a message string, returns display copy.
+ */
+export interface FriendlyError {
+  title: string;
+  body: string;
+}
+
+const PROTECTED_PAGE: FriendlyError = {
+  title: "Capture unavailable on this page",
+  body: "Chrome doesn't allow extensions to capture protected browser pages. Open a regular website to use FullScreenShot.",
+};
+
+const NO_SCROLL_CONTAINER: FriendlyError = {
+  title: "No scrollable region found",
+  body: "Use Full page or Visible area instead.",
+};
+
+const CAPTURE_INTERRUPTED: FriendlyError = {
+  title: "Capture interrupted",
+  body: "The page couldn't be captured completely. Please try again.",
+};
+
+const PAGE_CHANGED: FriendlyError = {
+  title: "The page changed during capture",
+  body: "Try again using Reliable mode for dynamic or lazy-loaded pages.",
+};
+
+const GENERIC: FriendlyError = {
+  title: "Capture failed",
+  body: "Something went wrong while capturing this page. Please try again.",
+};
+
+/**
+ * Patterns matched against the raw (technical) error message. Order
+ * matters — the first match wins. Matching is deliberately loose
+ * (case-insensitive substring) since browser error text isn't a stable
+ * API contract across Chrome versions.
+ */
+const PATTERNS: Array<{ test: RegExp; friendly: FriendlyError }> = [
+  { test: /extensions gallery cannot be scripted/i, friendly: PROTECTED_PAGE },
+  { test: /cannot access.*chrome:\/\//i, friendly: PROTECTED_PAGE },
+  { test: /cannot be scripted/i, friendly: PROTECTED_PAGE },
+  { test: /does not allow extensions to capture/i, friendly: PROTECTED_PAGE },
+  { test: /no longer on the page/i, friendly: NO_SCROLL_CONTAINER },
+  { test: /infinite scroll/i, friendly: PAGE_CHANGED },
+  { test: /tab was closed|no tab with id|frame was removed/i, friendly: CAPTURE_INTERRUPTED },
+];
+
+/**
+ * Maps a raw technical error message to safe, human-readable copy. The
+ * raw message should still be logged to the console by the caller for
+ * debugging — this function's output is what the UI shows.
+ */
+export function mapBrowserError(rawMessage: string): FriendlyError {
+  for (const { test, friendly } of PATTERNS) {
+    if (test.test(rawMessage)) {
+      return friendly;
+    }
+  }
+  return GENERIC;
+}

@@ -6,46 +6,141 @@
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <main>
-    <h1>FullScreenShot</h1>
-    <p role="status" id="status" aria-live="polite">Ready.</p>
-    <nav aria-label="Capture actions">
-      <button type="button" id="capture-visible">Capture Visible</button>
-      <button type="button" id="capture-fullpage">Capture Full Page</button>
-      <button type="button" id="capture-scrollarea">Select Scroll Area</button>
-    </nav>
-    <div class="field">
-      <label for="export-format">Image export</label>
-      <select id="export-format">
-        <option value="png" selected>PNG</option>
-        <option value="pdf">PDF</option>
-      </select>
+  <header class="header">
+    <img class="brand-icon" src="../icons/icon-32.png" width="32" height="32" alt="" />
+    <div class="header-text">
+      <p class="brand-title">FullScreenShot</p>
+      <p class="page-context" id="page-context">Analyzing page…</p>
     </div>
-    <div class="field" id="pdf-options" hidden>
-      <label for="pdf-page-size">PDF page size</label>
-      <select id="pdf-page-size">
-        <option value="auto" selected>Auto (original scale)</option>
-        <option value="a4">A4</option>
-        <option value="letter">Letter</option>
-      </select>
-      <label for="pdf-orientation">Orientation</label>
-      <select id="pdf-orientation">
-        <option value="portrait" selected>Portrait</option>
-        <option value="landscape">Landscape</option>
-      </select>
+  </header>
+
+  <div class="notice" id="restricted-notice" hidden>
+    <p class="notice-title" id="restricted-title"></p>
+    <p class="notice-body" id="restricted-body"></p>
+  </div>
+
+  <div class="notice notice-error" id="error-notice" role="alert" hidden>
+    <p class="notice-title" id="error-title"></p>
+    <p class="notice-body" id="error-body"></p>
+  </div>
+
+  <main id="view-main">
+    <section aria-labelledby="capture-heading">
+      <h2 class="section-label" id="capture-heading">Capture</h2>
+      <div class="mode-cards" role="radiogroup" aria-labelledby="capture-heading">
+        <label class="mode-card" data-mode="fullpage">
+          <input type="radio" name="capture-mode" value="fullpage" checked />
+          <span class="mode-card-text">
+            <span class="mode-card-title">Full page</span>
+            <span class="mode-card-subtitle">Entire scrollable page</span>
+          </span>
+        </label>
+        <label class="mode-card" data-mode="visible">
+          <input type="radio" name="capture-mode" value="visible" />
+          <span class="mode-card-text">
+            <span class="mode-card-title">Visible area</span>
+            <span class="mode-card-subtitle">What you currently see</span>
+          </span>
+        </label>
+        <label class="mode-card" data-mode="scrollarea" id="scrollarea-card" hidden>
+          <input type="radio" name="capture-mode" value="scrollarea" />
+          <span class="mode-card-text">
+            <span class="mode-card-title" id="scrollarea-title">Scroll area</span>
+            <span class="mode-card-subtitle" id="scrollarea-subtitle"></span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section aria-labelledby="format-heading">
+      <h2 class="section-label" id="format-heading">Format</h2>
+      <div class="segmented" role="radiogroup" aria-labelledby="format-heading">
+        <label class="segmented-option">
+          <input type="radio" name="export-format" value="png" checked />
+          <span>PNG</span>
+        </label>
+        <label class="segmented-option">
+          <input type="radio" name="export-format" value="pdf" />
+          <span>PDF</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="pdf-options" id="pdf-options" hidden aria-labelledby="pdf-options-heading">
+      <h2 class="section-label" id="pdf-options-heading">PDF options</h2>
+      <div class="pdf-options-row">
+        <div class="pdf-option-group">
+          <span class="pdf-option-label">Page size</span>
+          <div class="segmented segmented-compact" role="radiogroup" aria-label="PDF page size">
+            <label class="segmented-option"><input type="radio" name="pdf-page-size" value="auto" checked /><span>Auto</span></label>
+            <label class="segmented-option"><input type="radio" name="pdf-page-size" value="a4" /><span>A4</span></label>
+            <label class="segmented-option"><input type="radio" name="pdf-page-size" value="letter" /><span>Letter</span></label>
+          </div>
+        </div>
+        <div class="pdf-option-group">
+          <span class="pdf-option-label">Orientation</span>
+          <div class="segmented segmented-compact" role="radiogroup" aria-label="PDF orientation">
+            <label class="segmented-option"><input type="radio" name="pdf-orientation" value="portrait" checked /><span>Portrait</span></label>
+            <label class="segmented-option"><input type="radio" name="pdf-orientation" value="landscape" /><span>Landscape</span></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <button type="button" class="primary-cta" id="primary-cta">Capture full page</button>
+
+    <div class="progress-row" id="progress-row" hidden>
+      <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <p class="progress-text" id="progress-text" role="status" aria-live="polite"></p>
+      <button type="button" class="secondary-btn" id="cancel-btn">Cancel</button>
     </div>
-    <hr />
-    <div class="field">
-      <label for="markdown-mode">Markdown mode</label>
-      <select id="markdown-mode">
-        <option value="article" selected>Article</option>
-        <option value="full-dom">Full DOM</option>
-      </select>
-    </div>
-    <button type="button" id="export-markdown">Export Markdown</button>
-    <button type="button" id="cancel" hidden>Cancel</button>
-    <a href="../options/options.html" target="_blank" rel="noopener">Settings / About</a>
+
+    <button type="button" class="row-action" id="markdown-entry">
+      <span>Export page as Markdown</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
   </main>
+
+  <main id="view-markdown" hidden>
+    <button type="button" class="back-btn" id="markdown-back">
+      <span aria-hidden="true">‹</span> Back
+    </button>
+    <h2 class="view-title">Markdown export</h2>
+    <p class="muted">Extracts readable content directly from the page structure — no OCR, no screenshots.</p>
+    <div class="segmented" role="radiogroup" aria-label="Markdown mode">
+      <label class="segmented-option">
+        <input type="radio" name="markdown-mode" value="article" checked />
+        <span>Article</span>
+      </label>
+      <label class="segmented-option">
+        <input type="radio" name="markdown-mode" value="full-dom" />
+        <span>Full DOM</span>
+      </label>
+    </div>
+    <p class="muted" id="markdown-mode-hint">Best for readable page content</p>
+    <button type="button" class="primary-cta" id="markdown-export-btn">Export .md</button>
+  </main>
+
+  <footer class="footer">
+    <a class="footer-link" id="settings-link" href="../options/options.html#settings" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      Settings
+    </a>
+    <a class="footer-link" id="about-link" href="../options/options.html#about" target="_blank" rel="noopener">
+      About
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
+    </a>
+  </footer>
+
   <script type="module" src="popup.js"></script>
 </body>
 </html>
