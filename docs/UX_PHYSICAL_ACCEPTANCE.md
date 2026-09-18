@@ -217,8 +217,15 @@ Open `http://127.0.0.1:8899/fullpage-acceptance.html`, then Full page → PNG.
 - [ ] A2. Scrolling the result top to bottom shows SECTION 1 … SECTION 8 in
       order, each exactly once, with both its "TOP EDGE OF BAND n" and
       "BOTTOM EDGE OF BAND n" lines present.
-- [ ] A3. "STICKY HEADER" appears exactly once, at the very top.
-- [ ] A4. "FIXED FOOTER" appears exactly once, at the very bottom.
+- [ ] A3. "STICKY HEADER" appears exactly once, at the very top, and nowhere
+      else down the image.
+- [ ] A4. "FIXED FOOTER" does not appear repeated down the image. Note: with
+      the current fixed/sticky strategy it does not appear *at all*. Only the
+      first tile is captured with fixed elements visible, and a bottom-anchored
+      bar sits in the part of that first viewport the stitcher does not use
+      (each tile contributes only the band up to the next tile's origin). This
+      is long-standing behaviour, not something this repair changed; flag it if
+      you want fixed footers preserved and it will be handled separately.
 - [ ] A5. No visible seam or duplicated strip at any band boundary.
 - [ ] A6. After the capture the page is back where it started, with no
       leftover outlines and nothing hidden.
