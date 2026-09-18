@@ -171,22 +171,30 @@ default, so one corrupted field can't invalidate the rest.
 
 ## UX-P4 — Branding, dark mode, accessibility
 
-**Icon (v2).** `extension/icons/fullscreen-shot.svg` — an original
-design (rounded indigo `#4F46E5` square, white capture-frame corner
-brackets, a plain vertical page with a white-on-indigo down-chevron
-cut into its lower third). The chevron replaced v1's horizontal
-content-line marks, which at toolbar size read as a text/OCR-scan
-icon rather than "full page capture" — the failure mode this redesign
-was commissioned to fix (see `docs/superpowers/specs/` conventions on
-avoiding this look). No letter, no copied product iconography. Because
-naively downscaling the 128px master blurred the chevron away at 16px,
-`icon-16.png` is rendered from a 16px-specific optical pass (thicker
-strokes, slightly larger page) rather than a plain scale-down of the
-master SVG, while 32/48/128 come straight from
-`fullscreen-shot.svg`. Rasterized via `rsvg-convert` (already present
-on this build host; not added as a project dependency), visually
-reviewed at each size before being committed, and checked against
-white/light-gray/dark-gray/black backgrounds
+**Icon (v3).** `extension/icons/fullscreen-shot.svg` — an original
+camera pictogram (rounded indigo `#4F46E5` square, white camera body +
+viewfinder bump + lens, with a white page tab peeking out from behind
+its bottom-right corner). v2's abstract capture-frame-brackets + page +
+chevron design was rejected by the owner: it read fine in the popup at
+32px but was too abstract to parse as "screenshot" at real 16px
+toolbar size. v3 replaces the brackets metaphor with a simplified
+camera — the strongest immediate "capture" signal — keeping the page
+tab as a secondary, subtler "full page" cue so it doesn't compete with
+the camera silhouette. Two other camera candidates (a down-chevron
+hidden inside the lens; a short tail hanging from the lens) were built
+and compared side by side in a simulated 7-icon toolbar strip
+(`docs/assets/icon-v3-toolbar-comparison.png`) before picking the page
+tab variant, since the other two kept the camera marginally cleaner
+but their secondary signal was close to invisible at 16px. No letter,
+no copied product iconography — the underlying rectangle+bump+circle
+camera silhouette is a generic, universal pictogram convention, not
+copied from any specific product. `icon-16.png` renders from a
+16px-specific optical pass (larger body/bump/lens proportions) rather
+than a scale-down of the 128px master, while 32/48/128 come straight
+from `fullscreen-shot.svg`. Rasterized via `rsvg-convert` (already
+present on this build host; not added as a project dependency),
+visually reviewed at each size before being committed, and checked
+against white/light-gray/dark-gray/black backgrounds
 (`docs/assets/icon-preview.png`, a local validation aid, not shipped
 in the extension). Wired into `manifest.base.json`'s both `icons` and
 `action.default_icon` (unchanged paths — only the PNG/SVG content
@@ -236,3 +244,4 @@ substance from before this pass.
 | ---------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-09-18 | `e74aebd`          | Creación del icono v1 (brackets de encuadre + página con líneas de contenido) documentada en esta sección UX-P4.                                                 |
 | 2026-09-18 | `4c6c05b`          | Rediseño del icono a v2: se sustituyen las líneas de contenido por un chevron descendente (evita la lectura como "escáner de documento"); se añade un ajuste óptico específico para 16px y la hoja de validación `docs/assets/icon-preview.png`. |
+| 2026-09-18 | `3d6500d`, `1d884f7` | V2 rechazado por el owner (demasiado abstracto a 16px real). Rediseño del icono a v3: cámara simplificada (cuerpo + visor + lente) con una pestaña de página asomando detrás, sustituyendo la metáfora de brackets abstractos. Se documenta la comparación de tres candidatos de cámara en un toolbar simulado (`docs/assets/icon-v3-toolbar-comparison.png`) y se actualiza `docs/assets/icon-preview.png`. |
