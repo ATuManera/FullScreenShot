@@ -44,6 +44,11 @@ const DID_NOT_SCROLL: FriendlyError = {
   body: "FullScreenShot couldn't move this page to capture the rest of it. Try again, or use Visible area.",
 };
 
+const SCROLL_AREA_UNAVAILABLE: FriendlyError = {
+  title: "Scroll area can't be captured",
+  body: "Scroll the region into view so it's fully on screen, then try again.",
+};
+
 const GENERIC: FriendlyError = {
   title: "Capture failed",
   body: "Something went wrong while capturing this page. Please try again.",
@@ -74,6 +79,7 @@ const PATTERNS: Array<{ test: RegExp; friendly: FriendlyError }> = [
   { test: /does not allow extensions to capture/i, friendly: PROTECTED_PAGE },
   { test: /no longer on the page/i, friendly: NO_SCROLL_CONTAINER },
   { test: /did not scroll as expected/i, friendly: DID_NOT_SCROLL },
+  { test: /could not be brought into view|moved while it was being captured/i, friendly: SCROLL_AREA_UNAVAILABLE },
   { test: /infinite scroll/i, friendly: PAGE_CHANGED },
   { test: /tab was closed|no tab with id|frame was removed/i, friendly: CAPTURE_INTERRUPTED },
   { test: /disconnected port object|receiving end does not exist|message port closed before a response|extension context invalidated/i, friendly: CONNECTION_LOST },

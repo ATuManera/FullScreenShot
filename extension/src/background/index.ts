@@ -3,7 +3,8 @@
 
 import { browser } from "../browser/index.js";
 import { CaptureCancelledError, captureFullPage, captureScrollArea, captureVisible, exportMarkdown, PageNotCapturableError, type CaptureProgress } from "../capture/orchestrator.js";
-import { enterSelectionMode, type ContainerSelector } from "../capture/selection.js";
+import { abortSelectionPicker, runSelectionPicker, CONTAINER_SELECTOR_ATTR, type ContainerSelector } from "../capture/selection.js";
+import { parseSelectionMessage, type SelectionOutcome } from "../capture/selectionProtocol.js";
 import { selectSoleScrollCandidate } from "../capture/scrollDetectionInjectable.js";
 import { clearBadge, setBadgeError, setBadgeIndeterminate, setBadgeProgress, setBadgeSuccess } from "./badge.js";
 import { parseInboundMessage, type CaptureMode, type OutboundMessage, type StartCaptureMessage } from "./messages.js";
@@ -85,6 +86,103 @@ function reportProgress(mode: CaptureMode, progress: CaptureProgress, send: (mes
   }
 }
 
+/**
+ * How long the picker may stay open before it gives up on its own. This is a
+ * safeguard behind the real lifecycle (click, click-elsewhere, Escape,
+ * navigation and tab closure all settle it), not the mechanism — the page-side
+ * picker runs the same deadline, so the overlay is removed even if this worker
+ * is gone by then.
+ */
+const SELECTION_WATCHDOG_MS = 90_000;
+/**
+ * An MV3 service worker is evicted after ~30s without activity, and waiting
+ * for a human to click is exactly that kind of silence. A bounded no-op API
+ * call keeps the worker resident for the selection window only; it is cleared
+ * on every exit path and never outlives `SELECTION_WATCHDOG_MS`.
+ */
+const SELECTION_HEARTBEAT_MS = 20_000;
+
+/** Lets a CANCEL command reach an in-flight selection, which is not inside `runCapture`'s loop. */
+let abortActiveSelection: (() => void) | null = null;
+
+/**
+ * Runs the interactive picker and resolves with exactly one terminal outcome.
+ *
+ * The previous design awaited a single `executeScript` call whose injected
+ * Promise resolved only on a click, so a click on anything that was not a
+ * candidate settled nothing at all and the capture stayed pending forever with
+ * the page left decorated. The picker now reports through an ordinary runtime
+ * message, and every way the flow can end — selection, cancellation, the tab
+ * going away, the user pressing Cancel, or the deadline — resolves this
+ * promise and tears the picker down.
+ */
+async function pickScrollArea(tabId: number): Promise<SelectionOutcome> {
+  const requestId = crypto.randomUUID();
+
+  const outcome = await new Promise<SelectionOutcome>((resolve) => {
+    let settled = false;
+    const settle = (value: SelectionOutcome): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      chrome.runtime.onMessage.removeListener(onSelectionMessage);
+      chrome.tabs.onRemoved.removeListener(onTabRemoved);
+      clearInterval(heartbeat);
+      clearTimeout(watchdog);
+      abortActiveSelection = null;
+      resolve(value);
+    };
+
+    function onSelectionMessage(raw: unknown): void {
+      const parsed = parseSelectionMessage(raw, requestId);
+      if (parsed) {
+        settle(parsed);
+      }
+    }
+    function onTabRemoved(closedTabId: number): void {
+      if (closedTabId === tabId) {
+        settle({ status: "error", message: "The tab was closed during scroll-area selection." });
+      }
+    }
+
+    const heartbeat = setInterval(() => {
+      void chrome.runtime.getPlatformInfo().catch(() => undefined);
+    }, SELECTION_HEARTBEAT_MS);
+    const watchdog = setTimeout(() => settle({ status: "cancelled" }), SELECTION_WATCHDOG_MS);
+
+    chrome.runtime.onMessage.addListener(onSelectionMessage);
+    chrome.tabs.onRemoved.addListener(onTabRemoved);
+    abortActiveSelection = () => settle({ status: "cancelled" });
+
+    chrome.scripting
+      .executeScript({
+        target: { tabId },
+        func: runSelectionPicker,
+        args: [CONTAINER_SELECTOR_ATTR, requestId, SELECTION_WATCHDOG_MS],
+      })
+      .then(([injected]) => {
+        // No candidates left by the time the picker ran: the page changed
+        // between the popup's analysis and now. Report it rather than
+        // leaving the user staring at a page with nothing to click.
+        if (injected?.result === 0) {
+          settle({ status: "cancelled" });
+        }
+      })
+      .catch((e: unknown) => settle({ status: "error", message: e instanceof Error ? e.message : String(e) }));
+  });
+
+  // Whatever ended the selection, the page must not keep the picker. Clicking,
+  // Escape and the page-side deadline already clean up; this covers the paths
+  // that ended out here (Cancel, tab-level failures, the worker's watchdog).
+  if (outcome.status !== "selected") {
+    await chrome.scripting
+      .executeScript({ target: { tabId }, func: abortSelectionPicker })
+      .catch(() => undefined);
+  }
+  return outcome;
+}
+
 async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (message: OutboundMessage) => void, isCancelled: () => boolean): Promise<ResolvedExport | null> {
   const onProgress = (progress: CaptureProgress): void => reportProgress(msg.mode, progress, send);
 
@@ -116,12 +214,12 @@ async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (mes
 
   let selector = soleSelector;
   if (!selector) {
-    send({ type: "PROGRESS", text: "Click a scrollable area on the page (Esc to cancel)…" });
-    const [{ result: pickedSelector }] = (await chrome.scripting.executeScript({
-      target: { tabId },
-      func: enterSelectionMode,
-    })) as unknown as [{ result: ContainerSelector | null }];
-    selector = pickedSelector;
+    send({ type: "PROGRESS", text: "Choose a scroll area on the page (Esc to cancel)…" });
+    const outcome = await pickScrollArea(tabId);
+    if (outcome.status === "error") {
+      throw new Error(outcome.message);
+    }
+    selector = outcome.status === "selected" ? outcome.selector : null;
   }
 
   if (!selector) {
@@ -217,6 +315,9 @@ chrome.runtime.onMessage.addListener((raw: unknown, _sender, sendResponse: (resp
 
   if (message.type === "CANCEL") {
     cancelRequested = true;
+    // A capture waiting on the picker is not inside `runCapture`'s loop, so
+    // the polled `isCancelled` flag alone would never reach it.
+    abortActiveSelection?.();
     sendResponse(buildStateMessage(active));
     return false;
   }

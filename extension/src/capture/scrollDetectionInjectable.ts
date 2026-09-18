@@ -125,8 +125,21 @@ export function selectSoleScrollCandidate(): ContainerSelector | null {
     if (el.scrollHeight - el.clientHeight < MIN_SCROLL_DELTA) {
       return;
     }
+    // Same viewport-intersection requirement `detectScrollCandidates` applies.
+    // Without it this function and the popup's contextual analysis could
+    // disagree about how many regions exist, so the popup would offer a direct
+    // capture of a region that is not on screen at all.
+    if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) {
+      return;
+    }
     candidates.push(el);
   });
+
+  // A marker left over from an earlier capture would make `[attr="sole"]`
+  // ambiguous, so clear any before tagging this run's element.
+  for (const stale of Array.from(document.querySelectorAll(`[${attr}]`))) {
+    stale.removeAttribute(attr);
+  }
 
   const el = candidates[0];
   if (candidates.length !== 1 || !el) {

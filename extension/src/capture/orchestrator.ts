@@ -13,9 +13,11 @@ import { hideFixedAndStickyElements, restoreFixedAndStickyElements } from "./inj
 import { classifyPrescrollOutcome, DEFAULT_MAX_PRESCROLL_PASSES } from "./lazy.js";
 import { extractMarkdownAst, type MarkdownMode } from "./markdown.js";
 import {
-  boundingRectBySelector,
-  measureContainerBySelector,
-  scrollContainerBySelector,
+  positionContainerBand,
+  prepareContainerForCapture,
+  releaseContainer,
+  type ContainerBandOutcome,
+  type ContainerCaptureGeometry,
   type ContainerSelector,
 } from "./selection.js";
 import {
@@ -24,6 +26,7 @@ import {
   fingerprintRgba,
   scrollWindowToVerified,
   settleFrame,
+  SCROLL_POSITION_TOLERANCE_PX,
   type WindowScrollOutcome,
 } from "./scrollSync.js";
 import { begin, restore, suppressSmoothScroll, type PageStateSnapshot } from "./state.js";
@@ -85,6 +88,22 @@ export class DidNotScrollError extends Error {
   constructor() {
     super("The page did not scroll as expected. Try again or use Visible area.");
     this.name = "DidNotScrollError";
+  }
+}
+
+/** The chosen container could not be brought far enough on screen to capture. */
+export class ScrollAreaNotVisibleError extends Error {
+  constructor() {
+    super("The selected scroll area could not be brought into view. Scroll it into the window and try again.");
+    this.name = "ScrollAreaNotVisibleError";
+  }
+}
+
+/** The container's on-screen position shifted mid-capture, so the crop would be wrong. */
+export class ScrollAreaMovedError extends Error {
+  constructor() {
+    super("The selected scroll area moved while it was being captured. Try again.");
+    this.name = "ScrollAreaMovedError";
   }
 }
 
@@ -462,11 +481,21 @@ async function runReliablePrescroll(tabId: number, onProgress: ProgressCallback,
 }
 
 /**
- * Capture Selected Scroll Area: like `captureFullPage`, but scrolls a
- * chosen element's own `scrollTop` instead of the window, and crops every
- * captured viewport screenshot down to that element's on-screen bounding
- * box before handing it to the same Rust compositor. The rest of the page
- * around the container never becomes part of the composited output.
+ * Capture Selected Scroll Area: like `captureFullPage`, but scrolls a chosen
+ * element's own `scrollTop` instead of the window, and crops every captured
+ * viewport screenshot down to that element's on-screen content box before
+ * handing it to the same Rust compositor. The rest of the page around the
+ * container never becomes part of the composited output.
+ *
+ * Two things the earlier version assumed are now established rather than
+ * hoped for. The container is brought into view first and the tile height is
+ * the band that is genuinely on screen — a container taller than, or below,
+ * the viewport used to yield crops clamped to the screenshot's bounds, so
+ * tiles came back with mismatched heights and the compositor rejected them
+ * with a raw "invalid dimensions" string. And each tile's band origin is the
+ * `scrollTop` the container actually reached, re-read after the frame was
+ * composited, so a container that refuses to scroll aborts instead of
+ * producing a tall image of one repeated band.
  */
 export async function captureScrollArea(
   tabId: number,
@@ -480,52 +509,86 @@ export async function captureScrollArea(
   const tab = await getCapturableTab(tabId);
 
   onProgress({ text: "Preparing…" });
-  const [{ result: metrics }] = (await chrome.scripting.executeScript({
+  // Snapshot before `prepareContainerForCapture` moves the page: bringing the
+  // container into view is a page-scroll change like any other and has to be
+  // undone on every exit path.
+  const [{ result: snapshot }] = (await chrome.scripting.executeScript({
     target: { tabId },
-    func: measureContainerBySelector,
-    args: [selector.attr, selector.value],
-  })) as unknown as [{ result: ReturnType<typeof measureContainerBySelector> }];
+    func: begin,
+  })) as unknown as [{ result: PageStateSnapshot }];
 
-  if (!metrics) {
-    throw new NoScrollContainerSelectedError();
-  }
-
-  const [{ result: rect }] = (await chrome.scripting.executeScript({
-    target: { tabId },
-    func: boundingRectBySelector,
-    args: [selector.attr, selector.value],
-  })) as unknown as [{ result: ReturnType<typeof boundingRectBySelector> }];
-
-  if (!rect) {
-    throw new NoScrollContainerSelectedError();
-  }
-
-  const offsets = planTiles(metrics.clientHeight, metrics.scrollHeight, DEFAULT_TILE_OVERLAP_CSS_PX);
-  assertWithinTileSafetyLimit(offsets);
-  const rateLimiter = RateLimiter.defaultForCapture();
-
-  const tileWidths: number[] = [];
-  const tileHeights: number[] = [];
-  const rgbaChunks: Uint8Array[] = [];
-
+  let geometry: ContainerCaptureGeometry | null = null;
   try {
-    for (let i = 0; i < offsets.length; i++) {
+    await chrome.scripting.executeScript({ target: { tabId }, func: suppressSmoothScroll });
+
+    const [{ result: prepared }] = (await chrome.scripting.executeScript({
+      target: { tabId },
+      func: prepareContainerForCapture,
+      args: [selector.attr, selector.value],
+    })) as unknown as [{ result: ContainerCaptureGeometry | null }];
+
+    if (!prepared) {
+      throw new NoScrollContainerSelectedError();
+    }
+    geometry = prepared;
+    if (geometry.visibleHeight < 1 || geometry.cropWidth < 1) {
+      throw new ScrollAreaNotVisibleError();
+    }
+
+    const plannedOffsets = planTiles(geometry.visibleHeight, geometry.scrollHeight, DEFAULT_TILE_OVERLAP_CSS_PX);
+    assertWithinTileSafetyLimit(plannedOffsets);
+    const rateLimiter = RateLimiter.defaultForCapture();
+
+    const capturedOffsets: number[] = [];
+    const tileWidths: number[] = [];
+    const tileHeights: number[] = [];
+    const rgbaChunks: Uint8Array[] = [];
+    const fingerprints: string[] = [];
+    let previousActualTop: number | null = null;
+
+    for (let i = 0; i < plannedOffsets.length; i++) {
       if (isCancelled()) {
         throw new CaptureCancelledError();
       }
-      onProgress({ text: `Capturing ${i + 1} of ${offsets.length}…`, current: i + 1, total: offsets.length });
-      const offset = offsets[i];
+      onProgress({ text: `Capturing ${i + 1} of ${plannedOffsets.length}…`, current: i + 1, total: plannedOffsets.length });
+      const offset = plannedOffsets[i];
       if (offset === undefined) {
         throw new Error(`internal error: missing tile offset at index ${i}`);
       }
 
-      const scrolled = await chrome.scripting.executeScript({
+      const [{ result: band }] = (await chrome.scripting.executeScript({
         target: { tabId },
-        func: scrollContainerBySelector,
-        args: [selector.attr, selector.value, offset],
-      });
-      if (!scrolled[0]?.result) {
+        func: positionContainerBand,
+        args: [selector.attr, selector.value, offset, geometry.visibleHeight],
+      })) as unknown as [{ result: ContainerBandOutcome | null }];
+
+      if (!band) {
         throw new NoScrollContainerSelectedError();
+      }
+
+      const decision = decideTile({
+        requestedY: offset,
+        actualY: band.achievedOffset,
+        maxScrollY: band.maxContentOffset,
+        previousActualY: previousActualTop,
+      });
+      if (decision.kind === "abort") {
+        throw new DidNotScrollError();
+      }
+      if (decision.kind === "skip") {
+        continue;
+      }
+
+      // The container's horizontal position and the amount of it on screen are
+      // only established once. Page layout can shift under a capture (a lazy
+      // image above it resolving, a sticky bar collapsing); cropping the
+      // original rectangle anyway would silently capture the wrong pixels, and
+      // a band that no longer fits would be padded with whatever is beside it.
+      if (
+        Math.abs(band.cropX - geometry.cropX) > SCROLL_POSITION_TOLERANCE_PX ||
+        band.availableHeight < geometry.visibleHeight - SCROLL_POSITION_TOLERANCE_PX
+      ) {
+        throw new ScrollAreaMovedError();
       }
 
       const wait = rateLimiter.nextDelayMs(performance.now());
@@ -546,39 +609,57 @@ export async function captureScrollArea(
         throw new CaptureCancelledError();
       }
 
-      const { width, height, rgba } = await decodeAndCropPngDataUrlToRgba(dataUrl, rect, rect.devicePixelRatio);
+      const { width, height, rgba } = await decodeAndCropPngDataUrlToRgba(
+        dataUrl,
+        { x: band.cropX, y: band.cropY, width: geometry.cropWidth, height: geometry.visibleHeight },
+        geometry.devicePixelRatio,
+      );
+      capturedOffsets.push(decision.offsetY);
       tileWidths.push(width);
       tileHeights.push(height);
       rgbaChunks.push(rgba);
+      fingerprints.push(fingerprintRgba(rgba));
+      previousActualTop = decision.offsetY;
+    }
+
+    if (allCapturedTilesIdentical(fingerprints, capturedOffsets)) {
+      throw new DidNotScrollError();
     }
 
     onProgress({ text: "Processing…" });
     const concatenated = concatenateRgba(rgbaChunks);
-    const dpr = rect.devicePixelRatio;
+    const dpr = geometry.devicePixelRatio;
     const { bytes, mimeType } = encodeComposite(
       exportFormat,
       pdfOptions,
-      offsets,
-      metrics.clientWidth,
-      metrics.clientHeight,
+      capturedOffsets,
+      geometry.cropWidth,
+      geometry.visibleHeight,
       dpr,
       tileWidths,
       tileHeights,
       concatenated,
     );
 
+    const lastOffset = capturedOffsets[capturedOffsets.length - 1] ?? 0;
     return {
       bytes,
       mimeType,
       width: tileWidths[0] ?? 0,
-      height: Math.round(metrics.scrollHeight * dpr),
+      height: Math.round((lastOffset + geometry.visibleHeight) * dpr),
     };
   } finally {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: scrollContainerBySelector,
-      args: [selector.attr, selector.value, 0],
-    });
+    // Put back the container's own scroll position (not 0 — wherever the user
+    // had it), drop the marker attribute the capture used to re-find it, and
+    // undo the page scroll that brought it into view.
+    if (geometry) {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: releaseContainer,
+        args: [selector.attr, selector.value, geometry.originalScrollTop],
+      });
+    }
+    await chrome.scripting.executeScript({ target: { tabId }, func: restore, args: [snapshot] });
   }
 }
 
