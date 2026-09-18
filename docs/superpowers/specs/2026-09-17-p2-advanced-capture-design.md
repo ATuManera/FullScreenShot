@@ -48,6 +48,56 @@ dependencias (P5).
   la *detección* de "altura sigue creciendo" es una comparación numérica
   simple, testeable sin DOM.
 
+## Decisiones revisadas (reparación de runtime)
+
+**La selección deja de ser una promesa viva en el service worker.** El diseño
+original inyectaba una función `async` cuya promesa resolvía al hacer clic, y
+el background esperaba esa única llamada a `executeScript`. Hacer clic fuera
+de todo candidato no resolvía nada, de modo que el flujo quedaba pendiente sin
+desenlace posible y la página conservaba indefinidamente los contornos, los
+atributos marcadores y los listeners en fase de captura — `cleanup()` solo
+corría en los caminos que resolvían. A eso se suman dos hechos de MV3 y de
+Chrome: un service worker se desaloja tras ~30 s de silencio (esperar a una
+persona es exactamente eso), y el clic que cierra el popup es consumido por el
+cierre y nunca llega a la página.
+
+La selección viaja ahora como un mensaje de runtime serializable etiquetado con
+el id de su petición (`selectionProtocol.ts`). `runSelectionPicker` se instala
+y retorna de inmediato; clic en candidato, clic fuera, Escape, navegación y su
+propio plazo restauran la página y reportan exactamente un desenlace, así que
+la limpieza de la página ya no depende de que alguien escuche. El background
+además resuelve ante cierre de pestaña, ante Cancel y ante su propio plazo
+acotado — el timeout es una salvaguarda *detrás* del ciclo de vida, no un
+sustituto. Un heartbeat mantiene al worker residente solo durante la ventana de
+selección.
+
+**La geometría del contenedor se establece, no se asume.** El rectángulo se
+medía una vez y se reutilizaba para todos los recortes, sin garantizar que el
+contenedor estuviera en pantalla; uno por debajo del pliegue producía recortes
+clampeados a los límites de la captura, tiles de alturas distintas y el error
+crudo `invalid dimensions: 640x64` llegando al usuario.
+`prepareContainerForCapture` lo trae a la vista y reporta la banda realmente
+visible. `positionContainerBand` coloca cada fila pedida en el tope de esa
+banda combinando `element.scrollTop` con el **mínimo** desplazamiento de página
+necesario: un contenedor más alto que la ventana no puede subir por sí solo las
+filas que quedan más allá de `scrollHeight - clientHeight`, y sin ese
+complemento un panel de 900 px en una ventana de 657 px perdía en silencio sus
+últimos 243 px de contenido. Esto es la excepción prevista en "alterar
+`element.scrollTop`, no `window.scrollY`, salvo que haga falta para mantener
+visible el contenedor".
+
+La afirmación de P2 de que el orchestrator solo necesita `scrollHeight`/
+`clientHeight` del elemento sigue siendo cierta para el núcleo Rust (cero
+cambios en Rust), pero la altura de tile ya no es `clientHeight`: es la banda
+visible.
+
+`captureScrollArea` restaura el `scrollTop` original del contenedor en vez de
+ponerlo en 0, elimina el atributo marcador y deshace el scroll de página que
+introdujo. `selectSoleScrollCandidate` incorpora el filtro de intersección con
+el viewport que `detectScrollCandidates` ya aplicaba, para que la clasificación
+0/1/N del popup y la decisión de captura directa del background no puedan
+discrepar.
+
 ## Gate de salida de P2 — resultado real
 
 - Tests Rust: 60 passed, 0 failed (sin regresión respecto a P1).
@@ -72,3 +122,4 @@ dependencias (P5).
 | ---------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-09-17 | `3187cbd`         | Creación del spec P2                                                                                                                                                                                                                          |
 | 2026-09-17 | `52cfc50`         | Implementación completa de P2: Selected Scroll Area con selección interactiva verificada en Chromium real, modo Reliable de lazy-loading con detección de scroll infinito, límite de seguridad de tiles, lane de tests Node sin dependencias. |
+| 2026-09-18 | `02ad6b7`, `273172d` | Reparación de runtime de Selected Scroll Area: ciclo de vida de selección serializable y terminal (mensaje + desenlace único + limpieza del lado de la página), contenedor traído a la vista con banda visible real, y restauración completa de `scrollTop`, marcador y scroll de página. Verificado en Chromium real con `tests/pages/scrollarea-single.html` y `tests/pages/scrollarea-multiple.html`. |

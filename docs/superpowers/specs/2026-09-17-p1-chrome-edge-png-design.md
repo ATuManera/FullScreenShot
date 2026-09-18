@@ -74,6 +74,48 @@ igual cubran el contenido completo, no una zona de blending. Esto evita
 costuras visibles sin necesitar comparación de píxeles entre tiles
 adyacentes.
 
+## Estrategia de scroll (revisada — reparación de runtime)
+
+El diseño original trataba los offsets de `plan_tile_offsets` como el origen
+de banda de cada tile: se pedía `window.scrollTo(0, offsets[i])` y ese mismo
+valor se pasaba al compositor. Esa equivalencia es falsa. Pedir un scroll no
+es haber scrolleado: Chrome clampea al llegar al fondo, y hay páginas —
+motores de scroll propios, scroll-jacking, app shells — que aceptan la llamada
+y se quedan donde estaban. El compositor, al que se le decía que N viewports
+idénticos venían de N offsets distintos, los cosía en un PNG alto y la captura
+reportaba éxito: la imagen de "página completa" hecha de un viewport repetido.
+
+La regla ahora es que **el origen de banda es la posición alcanzada, nunca la
+solicitada**. Cada tile pasa por `scrollWindowToVerified`, que espera dos
+frames compositados (`requestAnimationFrame` encadenado) y lee `window.scrollY`
+de vuelta junto con el máximo de scroll vigente. `decideTile` clasifica el
+resultado:
+
+- posición alcanzada distinta de la anterior → se captura, con esa posición
+  como origen de banda;
+- misma posición que el tile anterior y la pedida estaba fuera de alcance
+  (clamp de Chrome al fondo) → se descarta el tile, no se cose dos veces;
+- misma posición que el tile anterior y la pedida era alcanzable → la página
+  se negó a scrollear: se aborta con mensaje accionable en vez de producir
+  una captura plausible pero falsa.
+
+`allCapturedTilesIdentical` es la defensa de último recurso para una página
+que reporta un `scrollY` que se mueve mientras renderiza siempre lo mismo;
+solo dispara cuando *todos* los tiles de una captura multi-tile y multi-posición
+son idénticos, de modo que una franja en blanco que abarque dos tiles en una
+página normal nunca la activa.
+
+Los dos frames de espera también cierran una carrera más silenciosa: el rate
+limiter devuelve 0 ms para la primera llamada, así que el tile 1 podía
+capturarse antes de que se pintara el scroll al tope, registrando el viewport
+previo del usuario como si fuera la cabecera de la página.
+
+La estrategia de fixed/sticky y la de stitching descritas arriba no cambian;
+lo único que cambia es de dónde salen los offsets que recibe el compositor
+(y que el conteo de "primer tile" ahora se lleva sobre tiles efectivamente
+capturados, no sobre el índice del plan, para que un tile descartado no deje
+al primero con sus elementos fixed ocultos).
+
 ## Verificación (dado el entorno de ejecución)
 
 Este entorno no tiene una ventana de Chrome/Edge con GUI disponible, así que
@@ -153,3 +195,4 @@ del entorno de este agente — ver nota en el gate):
 | ---------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-09-17 | `46b59f0`                                  | Creación del spec P1                                                                                                                                                                                                                                                                                                                                    |
 | 2026-09-17 | `1deba96`, `0e97ac8`, `ba539eb`, `9919879` | Implementación completa de P1: rate limiter, compositor streaming, PNG streaming real, bridge WASM ampliado (composeFullPagePng, RateLimiter), capa capture/ del navegador (geometry/sticky/state/injectable/orchestrator), mensajería background↔popup, página de resultado sin permiso `downloads`. Verificado con Playwright contra fixtures reales. |
+| 2026-09-18 | `5ca678d`, `273172d`                          | Reparación de runtime de Full Page: verificación de la posición de scroll alcanzada antes de componer, descarte de tiles clampeados, aborto ante página que no scrollea, y salvaguarda de tiles idénticos. Reproducido y verificado en Chromium real con `tests/pages/scroll-jacked-page.html` y `tests/pages/fullpage-acceptance.html`. |
