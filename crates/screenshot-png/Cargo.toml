@@ -9,4 +9,4 @@ description = "Lossless PNG encoding for FullScreenShot captures"
 
 [dependencies]
 screenshot-core = { path = "../screenshot-core" }
-png = "0.17"
+png = "0.18.1"

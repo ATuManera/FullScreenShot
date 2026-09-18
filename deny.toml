@@ -207,6 +207,7 @@ deny = [
 
 # Certain crates/versions that will be skipped when doing duplicate detection.
 skip = [
+    { crate = "miniz_oxide@0.8.9", reason = "Direct non-optional dependency of png 0.18.1; flate2 1.1.10 uses miniz_oxide 0.9.x, so these versions cannot currently be unified without replacing upstream dependencies." },
     #"ansi_term@0.11.0",
     #{ crate = "ansi_term@0.11.0", reason = "you can specify a reason why it can't be updated/removed" },
 ]

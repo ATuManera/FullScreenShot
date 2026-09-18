@@ -80,6 +80,7 @@ mod tests {
     use screenshot_core::compositor::TileImageMeta;
     use screenshot_core::geometry::Size;
     use screenshot_core::tile::TileId;
+    use std::io::Cursor;
 
     fn solid_tile(id: u64, width: u32, height: u32, color: [u8; 4]) -> (TileImageMeta, Vec<u8>) {
         let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
@@ -123,12 +124,17 @@ mod tests {
             &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
         );
 
-        let decoder = png::Decoder::new(png_bytes.as_slice());
+        let decoder = png::Decoder::new(Cursor::new(png_bytes.as_slice()));
         let mut reader = decoder.read_info().unwrap();
         let info = reader.info();
         assert_eq!(info.width, 4);
         assert_eq!(info.height, 5); // content height = 2 (offset) + 3 (viewport) = 5
-        let mut buf = vec![0u8; reader.output_buffer_size()];
+        let mut buf = vec![
+            0u8;
+            reader
+                .output_buffer_size()
+                .expect("decoded PNG buffer size should be known")
+        ];
         reader.next_frame(&mut buf).unwrap();
         // First band (tile A) contributes rows [0,2), second (tile B) rows [0,3) of its own image.
         assert_eq!(&buf[0..4], &[10, 20, 30, 255]);
