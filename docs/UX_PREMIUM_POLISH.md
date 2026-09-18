@@ -171,16 +171,26 @@ default, so one corrupted field can't invalidate the rest.
 
 ## UX-P4 — Branding, dark mode, accessibility
 
-**Icon.** `extension/icons/fullscreen-shot.svg` — an original design
-(rounded indigo `#4F46E5` square, white capture-frame corner brackets,
-a simplified vertical page with content-line marks, the page
-deliberately extending a little past the bottom bracket as a
-"continues below" cue for full-page capture). No letter, no copied
-product iconography. Rasterized to 16/32/48/128 px PNGs via
-`rsvg-convert` (already present on this build host; not added as a
-project dependency) and visually reviewed at each size before being
-committed. Wired into `manifest.base.json`'s both `icons` and
-`action.default_icon`.
+**Icon (v2).** `extension/icons/fullscreen-shot.svg` — an original
+design (rounded indigo `#4F46E5` square, white capture-frame corner
+brackets, a plain vertical page with a white-on-indigo down-chevron
+cut into its lower third). The chevron replaced v1's horizontal
+content-line marks, which at toolbar size read as a text/OCR-scan
+icon rather than "full page capture" — the failure mode this redesign
+was commissioned to fix (see `docs/superpowers/specs/` conventions on
+avoiding this look). No letter, no copied product iconography. Because
+naively downscaling the 128px master blurred the chevron away at 16px,
+`icon-16.png` is rendered from a 16px-specific optical pass (thicker
+strokes, slightly larger page) rather than a plain scale-down of the
+master SVG, while 32/48/128 come straight from
+`fullscreen-shot.svg`. Rasterized via `rsvg-convert` (already present
+on this build host; not added as a project dependency), visually
+reviewed at each size before being committed, and checked against
+white/light-gray/dark-gray/black backgrounds
+(`docs/assets/icon-preview.png`, a local validation aid, not shipped
+in the extension). Wired into `manifest.base.json`'s both `icons` and
+`action.default_icon` (unchanged paths — only the PNG/SVG content
+changed).
 
 **Dark mode.** Design tokens as CSS custom properties on `:root`,
 redefined under `@media (prefers-color-scheme: dark)` — no toggle (none
@@ -219,3 +229,10 @@ substance from before this pass.
   unchanged; no new permission was needed for any of UX-P1–UX-P4).
 - Safari packaging (explicitly out of scope for this task per the
   brief's "Chrome-first scope" section).
+
+## Historial
+
+| Fecha      | Commits de código | Cambio                                                                                                                                                            |
+| ---------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-18 | `e74aebd`          | Creación del icono v1 (brackets de encuadre + página con líneas de contenido) documentada en esta sección UX-P4.                                                 |
+| 2026-09-18 | `4c6c05b`          | Rediseño del icono a v2: se sustituyen las líneas de contenido por un chevron descendente (evita la lectura como "escáner de documento"); se añade un ajuste óptico específico para 16px y la hoja de validación `docs/assets/icon-preview.png`. |
