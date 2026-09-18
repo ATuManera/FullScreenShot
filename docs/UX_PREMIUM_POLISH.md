@@ -189,9 +189,12 @@ but their secondary signal was close to invisible at 16px. No letter,
 no copied product iconography — the underlying rectangle+bump+circle
 camera silhouette is a generic, universal pictogram convention, not
 copied from any specific product. `icon-16.png` renders from a
-16px-specific optical pass (larger body/bump/lens proportions) rather
-than a scale-down of the 128px master, while 32/48/128 come straight
-from `fullscreen-shot.svg`. Rasterized via `rsvg-convert` (already
+16px-specific optical pass rather than a scale-down of the 128px
+master, while 32/48/128 come straight from `fullscreen-shot.svg`. That
+optical pass was itself refined once more in the final Chrome polish
+pass (`extension/icons/fullscreen-shot-16.svg`, see "Final Chrome UX
+polish" below) after the owner's physical toolbar test found the page
+tab still too subtle. Rasterized via `rsvg-convert` (already
 present on this build host; not added as a project dependency),
 visually reviewed at each size before being committed, and checked
 against white/light-gray/dark-gray/black backgrounds
@@ -227,6 +230,55 @@ carries the full legal attribution (ATuManera, Fernando Gallarday,
 repository, `MPL-2.0-no-copyleft-exception`, privacy link) unchanged in
 substance from before this pass.
 
+## Final Chrome UX polish (`polish/final-chrome-ux`)
+
+A later, narrower pass on top of UX-P1–P4 and the runtime/IndexedDB
+repair, scoped to three things the owner flagged after physically
+testing Icon V3 and the post-repair Result Page.
+
+**16px icon.** Covered above — `fullscreen-shot-16.svg`'s page tab
+enlarged from 30×60 to 34×64 and shifted 4px, chosen over a
+same-size-but-repositioned alternative that read worse once compared
+at true 16px scale (`docs/assets/icon-v3-16px-optical-comparison.png`).
+The camera itself, and the master SVG/32/48/128 PNGs, are unchanged.
+
+**Result Page.** `result.html`/`result.css`/`result.ts` rebuilt around
+a new pure module, `result/resultView.ts`, that owns every piece of
+displayed copy and formatting (filename, "PNG · WxH" / "PDF · A4 ·
+Portrait" / "Markdown" summaries, status text, TTL/location notes) so
+it's unit-tested independent of the DOM. Explicit states: Ready
+("Capture complete" → Download <Format>), Downloaded ("Download
+started" → Download again / Close), Expired ("Result expired", no
+Download control), and a distinct Missing-id state ("No capture
+selected") for a bare/garbled result URL. Never claims what Chrome
+hasn't confirmed: no filesystem path (no `downloads` permission to
+verify one), no "Downloaded successfully" (only "started"). Close is a
+best-effort `window.close()` — works for a `chrome.tabs.create`-opened
+tab without any new permission — that swaps to "You can close this tab
+when you're done." if the tab is still visible ~300ms later, instead of
+shipping a button that can silently do nothing.
+
+`shared/resultStore.ts` gained optional `width`/`height`/`pdfPageSize`/
+`pdfOrientation` fields on `StoredResult` (backward-tolerant — a record
+saved before this change simply has them `undefined`), populated in
+`background/index.ts` from the pixel dimensions the capture pipeline
+already computed. No second PNG decode, no duplicated screenshot bytes.
+
+**Popup progress state.** The busy/progress-bar/Cancel visibility
+decision that used to live as scattered `setBusy()`/`renderProgress()`
+calls inside popup.ts's `onMessage` switch is now one pure function,
+`popup/progressView.ts`'s `progressStateForMessage`, covering every
+message type that can affect it (STATE, PROGRESS, DONE, CANCELLED,
+ERROR, NO_CONTAINER_SELECTED, ALREADY_CAPTURING) — unit-tested
+directly. Also fixes a real stale-text case: pressing the primary CTA
+while a capture is already running left this popup's own optimistic
+"Preparing…" showing under the error until the next PROGRESS broadcast
+happened to arrive; it now issues an immediate `GET_STATE` and applies
+the real in-progress text right away. Scroll-area analysis was already
+independent of this state machine (verified, not changed) — it never
+calls into progress UI, so "Locating scroll area…" was already scoped
+to the Scroll Area mode only.
+
 ## What this pass deliberately did not touch
 
 - The Rust capture core (`crates/`) — untouched except for the
@@ -245,3 +297,7 @@ substance from before this pass.
 | 2026-09-18 | `e74aebd`          | Creación del icono v1 (brackets de encuadre + página con líneas de contenido) documentada en esta sección UX-P4.                                                 |
 | 2026-09-18 | `4c6c05b`          | Rediseño del icono a v2: se sustituyen las líneas de contenido por un chevron descendente (evita la lectura como "escáner de documento"); se añade un ajuste óptico específico para 16px y la hoja de validación `docs/assets/icon-preview.png`. |
 | 2026-09-18 | `3d6500d`, `1d884f7` | V2 rechazado por el owner (demasiado abstracto a 16px real). Rediseño del icono a v3: cámara simplificada (cuerpo + visor + lente) con una pestaña de página asomando detrás, sustituyendo la metáfora de brackets abstractos. Se documenta la comparación de tres candidatos de cámara en un toolbar simulado (`docs/assets/icon-v3-toolbar-comparison.png`) y se actualiza `docs/assets/icon-preview.png`. |
+| 2026-09-18 | `7767420`, `6995d00` | Final Chrome UX polish, parte 1: ajuste óptico del icono a 16px (pestaña de página ampliada de 30×64 a 34×64), con comparación de candidatos documentada en `docs/assets/icon-v3-16px-optical-comparison.png`. Cámara y master SVG/32/48/128 sin cambios. |
+| 2026-09-18 | `7a4091d` | Final Chrome UX polish, parte 2: rediseño de la Result Page (estados Ready/Downloaded/Expired/Missing, resumen de formato/dimensiones, notas honestas sobre ubicación de descarga y TTL, botón Close con degradación) y extensión retrocompatible de `ResultMetadata` en `resultStore.ts`. |
+| 2026-09-18 | `47cfb16` | Final Chrome UX polish, parte 3: se extrae la decisión de progreso/Cancel del popup a `popup/progressView.ts` (función pura) y se corrige un texto "Preparing…" obsoleto en el caso `ALREADY_CAPTURING`. |
+| 2026-09-18 | `1300c53` | Final Chrome UX polish, parte 4: cobertura de tests para `resultView.ts` y `progressView.ts` (90/90 tests pasando). |
