@@ -219,13 +219,8 @@ Open `http://127.0.0.1:8899/fullpage-acceptance.html`, then Full page → PNG.
       "BOTTOM EDGE OF BAND n" lines present.
 - [ ] A3. "STICKY HEADER" appears exactly once, at the very top, and nowhere
       else down the image.
-- [ ] A4. "FIXED FOOTER" does not appear repeated down the image. Note: with
-      the current fixed/sticky strategy it does not appear *at all*. Only the
-      first tile is captured with fixed elements visible, and a bottom-anchored
-      bar sits in the part of that first viewport the stitcher does not use
-      (each tile contributes only the band up to the next tile's origin). This
-      is long-standing behaviour, not something this repair changed; flag it if
-      you want fixed footers preserved and it will be handled separately.
+- [ ] A4. "FIXED FOOTER" appears exactly once, at the very bottom of the
+      image, and nowhere else down it.
 - [ ] A5. No visible seam or duplicated strip at any band boundary.
 - [ ] A6. After the capture the page is back where it started, with no
       leftover outlines and nothing hidden.
@@ -278,6 +273,33 @@ Open `http://127.0.0.1:8899/scrollarea-multiple.html`.
 - [ ] D10. After every one of the above, the page has no leftover blue
       outlines and no leftover pointer cursor.
 
+### Gate F — Fast vs Reliable full-page loading
+
+Open `chrome://extensions` → FullScreenShot → Details → Extension options (or
+right-click the toolbar icon → Options) to reach **Full-page loading**.
+
+Open `http://127.0.0.1:8899/lazy-fullpage-acceptance.html`. Sections 4, 5 and
+6 of this page do not exist until it has actually been scrolled near its
+bottom, one per arrival — so the captured image says whether the capture
+loaded them.
+
+- [ ] F1. With **Fast** selected, capture Full page. The result is about 3
+      screens tall and contains SECTION 1-3 only. (This is correct: Fast plans
+      from the height the page has when capture starts.)
+- [ ] F2. Switch to **Reliable** and capture Full page again. The result is
+      about twice as tall and contains SECTION 1 through SECTION 6, in order,
+      each exactly once — the last three labelled "LAZY".
+- [ ] F3. During a Reliable capture the popup shows "Preparing… (pre-scroll n
+      of 8)" before it starts counting tiles.
+- [ ] F4. After both captures the page is back at the top and nothing is left
+      scrolled or hidden.
+- [ ] F5. On a real lazy-loading page (an image-heavy article, an infinite-ish
+      feed), Reliable brings in visibly more content than Fast, and a feed
+      that never stops growing ends with "The page changed during capture"
+      rather than scrolling forever.
+- [ ] F6. The setting persists: reopen the options page and the choice you
+      made is still selected.
+
 ### Gate E — nothing already working regressed
 
 - [ ] E1. Visible area still captures exactly the current viewport.
@@ -286,6 +308,8 @@ Open `http://127.0.0.1:8899/scrollarea-multiple.html`.
 - [ ] E3. Full Page never shows "Locating scroll area…".
 - [ ] E4. Cancel during a Full Page capture stops it, restores the page
       scroll, and leaves the popup ready for a new capture.
+- [ ] E5. A page with no fixed or sticky elements at all captures exactly as
+      before, with no extra pause at the end.
 
 ## Sign-off
 

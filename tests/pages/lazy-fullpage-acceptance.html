@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FullScreenShot — lazy Full Page acceptance fixture</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font: 16px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  section {
+    height: 700px; padding: 24px; border-bottom: 4px solid #111827;
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .band-label { font-size: 64px; font-weight: 800; letter-spacing: -.02em; }
+  .band-edge { font-size: 20px; font-weight: 700; font-family: ui-monospace, "SF Mono", monospace; }
+  .s1 { background: #fee2e2; } .s2 { background: #dcfce7; } .s3 { background: #dbeafe; }
+  .s4 { background: #fef9c3; } .s5 { background: #f3e8ff; } .s6 { background: #ffedd5; }
+</style>
+</head>
+<body>
+  <section class="s1"><div class="band-edge">TOP EDGE OF SECTION 1</div><div class="band-label">SECTION 1 — PRESENT AT LOAD</div><div class="band-edge">BOTTOM EDGE OF SECTION 1</div></section>
+  <section class="s2"><div class="band-edge">TOP EDGE OF SECTION 2</div><div class="band-label">SECTION 2 — PRESENT AT LOAD</div><div class="band-edge">BOTTOM EDGE OF SECTION 2</div></section>
+  <section class="s3"><div class="band-edge">TOP EDGE OF SECTION 3</div><div class="band-label">SECTION 3 — PRESENT AT LOAD</div><div class="band-edge">BOTTOM EDGE OF SECTION 3</div></section>
+<script>
+  // Deterministic, local-only lazy loading: sections 4 to 6 do not exist in
+  // the document until the page has actually been scrolled near its current
+  // bottom, one per arrival. No timers, no randomness, no network, no images
+  // — so a capture either scrolled far enough to bring a section in or it did
+  // not, and the resulting PNG says which.
+  //
+  // Fast is expected to capture 3 sections (2100px): it plans from the height
+  // the page has when capture starts. Reliable pre-scrolls to the bottom
+  // repeatedly first, so all 6 sections (4200px) exist before the plan is
+  // measured.
+  var TOTAL_SECTIONS = 6;
+  var LABELS = ["PRESENT AT LOAD", "PRESENT AT LOAD", "PRESENT AT LOAD", "LAZY", "LAZY", "LAZY"];
+  var rendered = 3;
+
+  function appendNextSection() {
+    if (rendered >= TOTAL_SECTIONS) return;
+    rendered += 1;
+    var n = rendered;
+    var el = document.createElement("section");
+    el.className = "s" + n;
+    el.innerHTML =
+      '<div class="band-edge">TOP EDGE OF SECTION ' + n + '</div>' +
+      '<div class="band-label">SECTION ' + n + ' — ' + LABELS[n - 1] + '</div>' +
+      '<div class="band-edge">BOTTOM EDGE OF SECTION ' + n + '</div>';
+    document.body.appendChild(el);
+  }
+
+  window.addEventListener("scroll", function () {
+    var reachedBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 300;
+    if (reachedBottom) appendNextSection();
+  }, { passive: true });
+</script>
+</body>
+</html>
