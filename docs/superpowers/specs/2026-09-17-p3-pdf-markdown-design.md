@@ -2,7 +2,7 @@
 
 - Fecha: 2026-09-17
 - Fase: P3 de P0–P6
-- Estado: aprobado (continuación autorizada de todas las fases)
+- Estado: aprobado
 
 ## Contexto
 
@@ -98,7 +98,7 @@ empaquetado de artefactos (P6).
 
 ## Historial
 
-| Fecha | Commits de código | Cambio |
-|---|---|---|
-| 2026-09-17 | `b436c94` | Creación del spec P3 y ADRs 0003/0004/0005 |
+| Fecha      | Commits de código               | Cambio                                                                                                                                                                                                                                           |
+| ---------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-09-17 | `b436c94`                       | Creación del spec P3 y ADRs 0003/0004/0005                                                                                                                                                                                                       |
 | 2026-09-17 | `139cd3c`, `9ca1b4a`, `79bdb58` | Implementación completa de P3: generador PDF real (pdf-writer), AST Markdown con parser JSON no confiable y renderizado completo, extractor DOM real verificado en Chromium, wiring end-to-end en la extensión (popup, background, result page). |

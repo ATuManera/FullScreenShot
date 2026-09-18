@@ -2,7 +2,7 @@
 
 - Fecha: 2026-09-17
 - Fase: P4 de P0–P6
-- Estado: aprobado (continuación autorizada de todas las fases)
+- Estado: aprobado
 
 ## Contexto
 
@@ -86,7 +86,7 @@ cualquier credential de Apple Developer.
 
 ## Historial
 
-| Fecha | Commits de código | Cambio |
-|---|---|---|
-| 2026-09-17 | `fc6c923` | Creación del spec P4 |
-| 2026-09-17 | `4e44508` | Preparación completa de Safari: análisis de compatibilidad, script de conversión (falla limpiamente sin Xcode completo, verificado), `cargo xtask package chromium/safari`, verificación de consistencia de versiones. |
+| Fecha      | Commits de código | Cambio                                                                                                                                                                                                                 |
+| ---------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-17 | `fc6c923`         | Creación del spec P4                                                                                                                                                                                                   |
+| 2026-09-17 | `4e44508`         | Preparación completa de Safari: análisis de compatibilidad, script de conversión (falla limpiamente sin Xcode completo, verificado), `cargo xtask package chromium/safari`, verificación de consistencia de versiones. |

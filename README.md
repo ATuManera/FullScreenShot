@@ -83,7 +83,6 @@ will report this clearly rather than silently fail.
 
 FullScreenShot's functional scope was informed by studying
 [mrcoles/full-page-screen-capture-chrome-extension](https://github.com/mrcoles/full-page-screen-capture-chrome-extension)
-([license](https://github.com/mrcoles/full-page-screen-capture-chrome-extension/blob/master/LICENSE))
 as a reference for known full-page-capture problems (DPR handling,
 sticky elements, seams). FullScreenShot is an independent
 implementation with a different architecture (Rust/WASM core, Manifest

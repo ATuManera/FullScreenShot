@@ -2,7 +2,7 @@
 
 - Fecha: 2026-09-17
 - Fase: P5 de P0–P6
-- Estado: aprobado (continuación autorizada de todas las fases)
+- Estado: aprobado 
 
 ## Contexto
 
@@ -96,7 +96,7 @@ arquitectura no motivados por un hallazgo de seguridad concreto.
 
 ## Historial
 
-| Fecha | Commits de código | Cambio |
-|---|---|---|
-| 2026-09-17 | `ec05773` | Creación del spec P5 |
-| 2026-09-17 | `88d7dfa` | Hardening completo: cargo audit/deny instalados y en verde, fixture DOM hostil verificado en Chromium real (con un bug de fixture encontrado y corregido en el proceso), tests de mensajes hostiles/fuzzing, inventario de licencias transitivo generado. |
+| Fecha      | Commits de código | Cambio                                                                                                                                                                                                                                                    |
+| ---------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-17 | `ec05773`         | Creación del spec P5                                                                                                                                                                                                                                      |
+| 2026-09-17 | `88d7dfa`         | Hardening completo: cargo audit/deny instalados y en verde, fixture DOM hostil verificado en Chromium real (con un bug de fixture encontrado y corregido en el proceso), tests de mensajes hostiles/fuzzing, inventario de licencias transitivo generado. |

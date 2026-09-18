@@ -2,7 +2,7 @@
 
 - Fecha: 2026-09-17
 - Fase: P1 de P0–P6
-- Estado: aprobado (el usuario autorizó continuar y completar todas las fases sin pausas de confirmación por fase)
+- Estado: aprobado 
 
 ## Contexto
 
@@ -149,7 +149,7 @@ del entorno de este agente — ver nota en el gate):
 
 ## Historial
 
-| Fecha | Commits de código | Cambio |
-|---|---|---|
-| 2026-09-17 | `46b59f0` | Creación del spec P1 |
+| Fecha      | Commits de código                          | Cambio                                                                                                                                                                                                                                                                                                                                                  |
+| ---------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-17 | `46b59f0`                                  | Creación del spec P1                                                                                                                                                                                                                                                                                                                                    |
 | 2026-09-17 | `1deba96`, `0e97ac8`, `ba539eb`, `9919879` | Implementación completa de P1: rate limiter, compositor streaming, PNG streaming real, bridge WASM ampliado (composeFullPagePng, RateLimiter), capa capture/ del navegador (geometry/sticky/state/injectable/orchestrator), mensajería background↔popup, página de resultado sin permiso `downloads`. Verificado con Playwright contra fixtures reales. |

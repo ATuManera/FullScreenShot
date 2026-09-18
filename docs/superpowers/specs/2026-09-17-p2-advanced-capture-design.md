@@ -2,7 +2,7 @@
 
 - Fecha: 2026-09-17
 - Fase: P2 de P0–P6
-- Estado: aprobado (continuación autorizada de todas las fases)
+- Estado: aprobado 
 
 ## Contexto
 
@@ -68,7 +68,7 @@ dependencias (P5).
 
 ## Historial
 
-| Fecha | Commits de código | Cambio |
-|---|---|---|
-| 2026-09-17 | `3187cbd` | Creación del spec P2 |
-| 2026-09-17 | `52cfc50` | Implementación completa de P2: Selected Scroll Area con selección interactiva verificada en Chromium real, modo Reliable de lazy-loading con detección de scroll infinito, límite de seguridad de tiles, lane de tests Node sin dependencias. |
+| Fecha      | Commits de código | Cambio                                                                                                                                                                                                                                        |
+| ---------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-17 | `3187cbd`         | Creación del spec P2                                                                                                                                                                                                                          |
+| 2026-09-17 | `52cfc50`         | Implementación completa de P2: Selected Scroll Area con selección interactiva verificada en Chromium real, modo Reliable de lazy-loading con detección de scroll infinito, límite de seguridad de tiles, lane de tests Node sin dependencias. |

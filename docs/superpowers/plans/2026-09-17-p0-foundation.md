@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - License: MPL-2.0, "Incompatible With Secondary Licenses" (Exhibit B notice required in `LICENSE`).
-- SPDX header on project-owned source files: `SPDX-License-Identifier: MPL-2.0-no-copyleft-exception` / `Copyright (c) 2026 ATuManera / Fernando Gallarday`.
+- SPDX header on project-owned source files: `SPDX-License-Identifier: MPL-2.0-no-copyleft-exception` / `Copyright (c) 2026 A Tu Manera Digital / Fernando Gallarday`.
 - Canonical repo: `https://github.com/ATuManera/FullScreenShot` (referenced in docs even though not yet created remotely).
 - Manifest V3 only. Permissions in P0: `activeTab`, `scripting`, `storage` — nothing else.
 - No remote scripts, no telemetry, no network calls anywhere in the codebase.
@@ -25,6 +25,7 @@
 ### Task 1: Cargo workspace + screenshot-core (error, geometry)
 
 **Files:**
+
 - Create: `Cargo.toml` (workspace root)
 - Create: `crates/screenshot-core/Cargo.toml`
 - Create: `crates/screenshot-core/src/lib.rs`
@@ -32,9 +33,13 @@
 - Create: `crates/screenshot-core/src/geometry.rs`
 
 **Interfaces:**
+
 - Produces: `screenshot_core::error::CoreError` (enum, `Debug + Display + std::error::Error`, variants: `InvalidDimensions { width: u32, height: u32 }`, `Overflow(String)`).
+
 - Produces: `screenshot_core::geometry::{Point, Size, Rect, DevicePixelRatio}` — `Point{x:f64,y:f64}`, `Size{width:f64,height:f64}`, `Rect{origin:Point,size:Size}`, `DevicePixelRatio(f64)` (newtype).
+
 - Produces: `screenshot_core::geometry::DevicePixelRatio::css_to_device(&self, css_px: f64) -> f64` and `device_to_css(&self, device_px: f64) -> f64`.
+
 - Produces: `screenshot_core::geometry::plan_tile_offsets(viewport_height: f64, content_height: f64, overlap: f64) -> Result<Vec<f64>, CoreError>` — returns the list of scroll-Y offsets (CSS px) needed to cover `content_height` using a viewport of `viewport_height`, with `overlap` px of intentional overlap between consecutive tiles to avoid seam gaps from rounding. Must return `Err(CoreError::InvalidDimensions)` if `viewport_height <= 0.0` or `content_height < 0.0`, and `Err(CoreError::Overflow)` if the computed tile count would exceed 100_000.
 
 - [ ] **Step 1: Write workspace root `Cargo.toml`**
@@ -306,6 +311,7 @@ git commit -m "feat(core): initialize workspace and capture geometry"
 ### Task 2: screenshot-core remaining modules (capture_plan, tile, compositor, validation)
 
 **Files:**
+
 - Create: `crates/screenshot-core/src/capture_plan.rs`
 - Create: `crates/screenshot-core/src/tile.rs`
 - Create: `crates/screenshot-core/src/compositor.rs`
@@ -313,11 +319,17 @@ git commit -m "feat(core): initialize workspace and capture geometry"
 - Modify: `crates/screenshot-core/src/lib.rs`
 
 **Interfaces:**
+
 - Consumes: `crate::geometry::{Rect, Point, Size}`, `crate::error::CoreError` from Task 1.
+
 - Produces: `screenshot_core::tile::TileId(pub u64)` (newtype, `Copy + Eq + Hash + Ord`).
+
 - Produces: `screenshot_core::tile::Tile { pub id: TileId, pub scroll_offset: crate::geometry::Point, pub crop: Rect }`.
+
 - Produces: `screenshot_core::capture_plan::CapturePlan { pub tiles: Vec<Tile>, pub content_size: Size }` and `CapturePlan::from_offsets(offsets: &[f64], viewport: Size) -> CapturePlan`.
+
 - Produces: `screenshot_core::validation::validate_plan(plan: &CapturePlan) -> Result<(), CoreError>` — checks: no duplicate `TileId`s, no duplicate `scroll_offset`s among tiles (catches "duplicate tiles"), tiles list not empty (catches "missing tiles"), every `crop.size` has positive width/height.
+
 - Produces: `screenshot_core::compositor::CompositeError` (re-exported alias `pub type CompositeError = CoreError;`) — the streaming compositor implementation itself lands in P1 alongside the PNG writer; this module in P0 only defines `pub trait RowSink { fn write_row(&mut self, row: &[u8]) -> Result<(), CoreError>; }`, the interface P1's real compositor and PNG writer will implement against.
 
 - [ ] **Step 1: Write `crates/screenshot-core/src/tile.rs` with tests**
@@ -598,18 +610,26 @@ git commit -m "feat(core): add capture plan, tile, validation and compositor int
 ### Task 3: screenshot-png, screenshot-pdf, screenshot-md, screenshot-wasm crate skeletons
 
 **Files:**
+
 - Create: `crates/screenshot-png/Cargo.toml`, `crates/screenshot-png/src/lib.rs`
 - Create: `crates/screenshot-pdf/Cargo.toml`, `crates/screenshot-pdf/src/lib.rs`, `crates/screenshot-pdf/src/paginator.rs`
 - Create: `crates/screenshot-md/Cargo.toml`, `crates/screenshot-md/src/lib.rs`, `crates/screenshot-md/src/ast.rs`, `crates/screenshot-md/src/sanitizer.rs`, `crates/screenshot-md/src/writer.rs`
 - Create: `crates/screenshot-wasm/Cargo.toml`, `crates/screenshot-wasm/src/lib.rs`
 
 **Interfaces:**
+
 - Consumes: `screenshot_core::geometry::Size`, `screenshot_core::CoreError` from Task 1/2.
+
 - Produces: `screenshot_pdf::paginator::PageSize` enum (`A4`, `Letter`, `Auto(Size)`) and `paginate(content_height: f64, page_height: f64) -> Result<Vec<(f64, f64)>, CoreError>` returning `(start, end)` CSS-px ranges per page — reuses the same "no gaps, no overlap-loss" property as Task 1's tile planner but for page breaks, not overlapping tiles (pages must NOT overlap).
+
 - Produces: `screenshot_md::ast::{Node, Document}` — `Node` enum with variants matching spec section 19: `Heading{level:u8, children:Vec<Node>}`, `Paragraph(Vec<Node>)`, `Text(String)`, `Strong(Vec<Node>)`, `Emphasis(Vec<Node>)`, `Link{href:String, children:Vec<Node>}`, `Image{src:String, alt:String}`, `OrderedList(Vec<Node>)`, `UnorderedList(Vec<Node>)`, `ListItem(Vec<Node>)`, `Table{rows:Vec<Node>}`, `TableRow(Vec<Node>)`, `TableCell(Vec<Node>)`, `Code(String)`, `CodeBlock{lang:Option<String>, code:String}`, `BlockQuote(Vec<Node>)`, `HorizontalRule`. `Document{children: Vec<Node>}`.
+
 - Produces: `screenshot_md::sanitizer::sanitize_href(href: &str) -> Option<String>` — returns `None` for `javascript:` URLs (case-insensitive, whitespace-tolerant), `Some(href.to_string())` otherwise.
+
 - Produces: `screenshot_md::writer::write_markdown(doc: &Document) -> String` — deterministic renderer covering `Heading`, `Paragraph`, `Text`, `Strong`, `Emphasis`, `Link` (via `sanitize_href`, dropping unsafe links to plain text), `CodeBlock`, `HorizontalRule` (the remaining node kinds are wired into the writer in P3 alongside full DOM-to-AST extraction; the writer already exhaustively matches every `Node` variant so this compiles and there is no `todo!()`/`unimplemented!()` path — unhandled-in-P0 variants currently render their child text via a shared `render_children` fallback).
+
 - Produces: `screenshot_png` crate depends on `png` crate (MIT/Apache-2.0, wasm32-compatible) and exposes `screenshot_png::encode_rgba(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, CoreError>`.
+
 - Produces: `screenshot_wasm` crate depends on `wasm-bindgen` and re-exports `#[wasm_bindgen] pub fn plan_tiles(viewport_height: f64, content_height: f64, overlap: f64) -> Result<js_sys::Array, JsValue>` wrapping Task 1's `plan_tile_offsets`.
 
 - [ ] **Step 1: Write `crates/screenshot-png/Cargo.toml`**
@@ -1161,6 +1181,7 @@ git commit -m "feat: add png, pdf pagination, markdown AST/writer and wasm bridg
 ### Task 4: Legal, licensing and attribution documents
 
 **Files:**
+
 - Create: `LICENSE`
 - Create: `AUTHORS.md`
 - Create: `NOTICE.md`
@@ -1174,6 +1195,7 @@ git commit -m "feat: add png, pdf pagination, markdown AST/writer and wasm bridg
 - Create: `README.md`
 
 **Interfaces:**
+
 - Consumes: nothing (pure documentation), but every doc must agree verbatim on: project name `FullScreenShot`, org `ATuManera`, author `Fernando Gallarday`, canonical repo `https://github.com/ATuManera/FullScreenShot`, year `2026`, license `MPL-2.0-no-copyleft-exception`.
 
 - [ ] **Step 1: Fetch and write the official MPL-2.0 text to `LICENSE`, then append Exhibit B**
@@ -1181,7 +1203,6 @@ git commit -m "feat: add png, pdf pagination, markdown AST/writer and wasm bridg
 Fetch the plain-text official license from `https://www.mozilla.org/media/MPL/2.0/index.f75d2927d3c1.txt` (Mozilla's canonical plain-text MPL-2.0). Write its exact contents to `LICENSE` verbatim — do not alter a single word of the MPL body. Then append this exact block at the end of the file (this is Exhibit B language from the official MPL-2.0 text itself, selected as the project's choice):
 
 ```text
-
 ---
 
 This Source Code Form is "Incompatible With Secondary Licenses", as
@@ -1612,12 +1633,20 @@ https://github.com/ATuManera/FullScreenShot. See `AUTHORS.md`,
 ## Roadmap
 
 - P1: Chrome/Edge Capture Visible + Capture Full Page → PNG
+
 - P2: Selected Scroll Area, lazy loading, huge-page handling
+
 - P3: PDF export, Markdown export
+
 - P4: Safari
+
 - P5: Security hardening, `cargo audit`/`cargo deny`
+
 - P6: Release-candidate packaging
-```
+  
+  ```
+  
+  ```
 
 - [ ] **Step 12: Cross-check consistency**
 
@@ -1641,12 +1670,15 @@ git commit -m "docs: establish licensing, privacy, security and project attribut
 ### Task 5: Architecture Decision Records (ADR-0001, ADR-0002, ADR-0006)
 
 **Files:**
+
 - Create: `docs/architecture/ADR-0001-rust-wasm-core.md`
 - Create: `docs/architecture/ADR-0002-browser-permissions.md`
 - Create: `docs/architecture/ADR-0006-licensing-and-attribution.md`
 
 **Interfaces:**
+
 - Consumes: nothing.
+
 - Produces: nothing consumed by later tasks; these are documentation records only.
 
 - [ ] **Step 1: Write `docs/architecture/ADR-0001-rust-wasm-core.md`**
@@ -1827,6 +1859,7 @@ git commit -m "docs: add ADR-0001, ADR-0002, ADR-0006 for P0 decisions"
 ### Task 6: Minimal Manifest V3 extension shell (Chrome/Edge)
 
 **Files:**
+
 - Create: `extension/manifest.base.json`
 - Create: `extension/src/browser/index.ts`
 - Create: `extension/src/background/index.ts`
@@ -1840,7 +1873,9 @@ git commit -m "docs: add ADR-0001, ADR-0002, ADR-0006 for P0 decisions"
 - Create: `browser/chromium/build.sh`
 
 **Interfaces:**
+
 - Consumes: nothing from Rust yet (P0's extension shell does not call into WASM for capture logic — that wiring happens in P1 when there is real capture logic to call). It does verify the WASM artifact loads under the extension's CSP.
+
 - Produces: `extension/src/browser/index.ts` exports `export const browser: BrowserAdapter` where `BrowserAdapter` wraps `chrome.*` APIs used so far (`captureVisibleTab` signature reserved for P1, `runtime.getManifest`) behind a promise-based interface — this is the seam P1's capture logic will extend, not bypass.
 
 - [ ] **Step 1: Write `extension/manifest.base.json`**
@@ -2155,6 +2190,7 @@ git commit -m "feat(chromium): add minimal MV3 extension shell"
 ### Task 7: Test fixtures
 
 **Files:**
+
 - Create: `tests/pages/basic.html`
 - Create: `tests/pages/long-page.html`
 - Create: `tests/pages/sticky-header.html`
@@ -2167,7 +2203,9 @@ git commit -m "feat(chromium): add minimal MV3 extension shell"
 - Create: `tests/pages/markdown-content.html`
 
 **Interfaces:**
+
 - Consumes: nothing.
+
 - Produces: static HTML fixtures that P1/P2/P3 browser tests (Playwright) will load by relative path `tests/pages/<name>.html`.
 
 - [ ] **Step 1: Write `tests/pages/basic.html`**
@@ -2444,11 +2482,14 @@ git commit -m "test: add browser fixture pages for capture and markdown testing"
 ### Task 8: xtask build entrypoint
 
 **Files:**
+
 - Create: `xtask/Cargo.toml`
 - Create: `xtask/src/main.rs`
 
 **Interfaces:**
+
 - Consumes: nothing from other crates at compile time (shells out via `std::process::Command`).
+
 - Produces: `cargo xtask build` and `cargo xtask test` CLI subcommands, invoked as documented in `README.md`/`CONTRIBUTING.md`.
 
 - [ ] **Step 1: Write `xtask/Cargo.toml`**
@@ -2550,10 +2591,13 @@ git commit -m "chore: add cargo xtask build/test entrypoint"
 ### Task 9: CI workflow
 
 **Files:**
+
 - Create: `.github/workflows/ci.yml`
 
 **Interfaces:**
+
 - Consumes: nothing (runs the same commands defined in Task 8's `xtask` and Task 6's extension typecheck).
+
 - Produces: a GitHub Actions workflow triggered on push/PR to `main`.
 
 - [ ] **Step 1: Write `.github/workflows/ci.yml`**
@@ -2621,10 +2665,13 @@ git commit -m "ci: add fmt, clippy, test, build and typecheck workflow"
 ### Task 10: P0 exit-gate verification
 
 **Files:**
+
 - None created; this task only runs verification commands and records results in `docs/superpowers/specs/2026-09-17-p0-foundation-design.md`'s history table.
 
 **Interfaces:**
+
 - Consumes: everything from Tasks 1-9.
+
 - Produces: a verified PASS/FAIL record for the P0 gate defined in the spec.
 
 - [ ] **Step 1: Run the full gate**
