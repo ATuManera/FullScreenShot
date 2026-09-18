@@ -196,8 +196,92 @@ and static inspection (see the branch's final report for exactly what
       "Capture already running", and the progress text reflects the
       real in-progress capture (not a stuck "Preparing…").
 
+## Full Page + Scroll Area runtime repair (`fix/fullpage-scrollarea-runtime`)
+
+These four gates must pass physically before PDF/Markdown acceptance is
+resumed. They exist because Full Page and Scroll Area were physically
+broken on `polish/final-chrome-ux`: Full Page produced a tall PNG made of
+one viewport repeated, and Scroll Area with two or more regions never
+completed. Serve the fixtures over HTTP (`file://` URLs restrict what an
+extension may inject) — from the repo root:
+
+```
+python3 -m http.server 8899 --directory tests/pages
+```
+
+### Gate A — Full Page on the controlled fixture
+
+Open `http://127.0.0.1:8899/fullpage-acceptance.html`, then Full page → PNG.
+
+- [ ] A1. The result is roughly 8 screens tall, not one viewport repeated.
+- [ ] A2. Scrolling the result top to bottom shows SECTION 1 … SECTION 8 in
+      order, each exactly once, with both its "TOP EDGE OF BAND n" and
+      "BOTTOM EDGE OF BAND n" lines present.
+- [ ] A3. "STICKY HEADER" appears exactly once, at the very top.
+- [ ] A4. "FIXED FOOTER" appears exactly once, at the very bottom.
+- [ ] A5. No visible seam or duplicated strip at any band boundary.
+- [ ] A6. After the capture the page is back where it started, with no
+      leftover outlines and nothing hidden.
+
+### Gate B — Full Page on a real long page
+
+Open a real long article (a news site, a long Wikipedia page).
+
+- [ ] B1. The result contains the whole article, each part exactly once.
+- [ ] B2. The site's sticky navigation bar is not repeated down the image.
+- [ ] B3. If the page refuses to scroll (some app shells and scroll-jacking
+      marketing pages do), the capture stops with "The page didn't scroll"
+      and suggests Visible area — it must never hand back a tall image of
+      the same viewport repeated. `tests/pages/scroll-jacked-page.html`
+      reproduces this deliberately.
+
+### Gate C — Scroll area, exactly one internal region
+
+Open `http://127.0.0.1:8899/scrollarea-single.html`.
+
+- [ ] C1. The popup shows "Scroll area" and "1 scrollable region detected".
+- [ ] C2. The primary button reads "Capture scroll area".
+- [ ] C3. Pressing it captures immediately — no picker, no blue outlines.
+- [ ] C4. The result contains PANEL ROW 1 … PANEL ROW 14, each exactly once,
+      and nothing from outside the panel (no page heading, no note text).
+- [ ] C5. The panel is left scrolled back where it was.
+
+### Gate D — Scroll area, multiple internal regions
+
+Open `http://127.0.0.1:8899/scrollarea-multiple.html`.
+
+- [ ] D1. The popup shows "Choose scroll area…" and "2 scrollable regions
+      detected"; the primary button reads "Choose scroll area".
+- [ ] D2. Pressing it outlines both panels in blue and the cursor becomes a
+      pointer over them. (The click that dismisses the popup is swallowed by
+      Chrome and does not reach the page — the outlines stay up for the next
+      click.)
+- [ ] D3. Hovering a panel thickens its outline.
+- [ ] D4. Clicking the right-hand (green-bordered) panel captures it. The
+      result contains BETA ROW 1 … BETA ROW 12 and no ALPHA rows.
+- [ ] D5. No blue selector outline appears anywhere in the captured image.
+- [ ] D6. Repeat and click the left-hand panel: the result contains ALPHA
+      rows only.
+- [ ] D7. Repeat and press Escape instead: outlines disappear, no capture
+      starts, the popup returns to a ready state.
+- [ ] D8. Repeat and click empty page background instead: same as D7 — this
+      must not hang.
+- [ ] D9. Repeat and press Cancel in the popup while the picker is open:
+      outlines disappear and the popup returns to ready.
+- [ ] D10. After every one of the above, the page has no leftover blue
+      outlines and no leftover pointer cursor.
+
+### Gate E — nothing already working regressed
+
+- [ ] E1. Visible area still captures exactly the current viewport.
+- [ ] E2. The result page still opens, still survives a reload, and Download
+      still works.
+- [ ] E3. Full Page never shows "Locating scroll area…".
+- [ ] E4. Cancel during a Full Page capture stops it, restores the page
+      scroll, and leaves the popup ready for a new capture.
+
 ## Sign-off
 
 This checklist may only be marked complete by Fernando Gallarday after
 physically running it. No automated report may claim "PASS" on any of
-these 53 items.
+these items.

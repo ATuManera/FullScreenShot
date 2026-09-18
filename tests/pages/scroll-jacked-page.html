@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scroll-jacked page fixture</title>
+<style>
+  body { margin: 0; }
+  section { height: 700px; padding: 24px; font: 700 48px system-ui, sans-serif; border-bottom: 4px solid #000; }
+  section:nth-child(odd) { background: #fecaca; }
+  section:nth-child(even) { background: #bbf7d0; }
+</style>
+</head>
+<body>
+  <section>JACKED 1</section><section>JACKED 2</section><section>JACKED 3</section>
+  <section>JACKED 4</section><section>JACKED 5</section><section>JACKED 6</section>
+  <section>JACKED 7</section><section>JACKED 8</section>
+<script>
+  // Deterministic reproduction of a real-world class of page that reports a
+  // tall `documentElement.scrollHeight` but refuses to stay scrolled: custom
+  // scroll engines, scroll-jacking marketing pages and some app shells all
+  // behave this way. `window.scrollTo(0, y)` appears to succeed and then the
+  // page immediately snaps back, so every tile screenshot is the same
+  // viewport. No animation and no randomness — the snap-back is synchronous.
+  window.addEventListener("scroll", () => { window.scrollTo(0, 0); }, { passive: true });
+</script>
+</body>
+</html>

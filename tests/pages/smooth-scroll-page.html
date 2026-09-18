@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Smooth-scroll regression fixture</title>
+<style>
+  /* scroll-behavior declared on body (the scrolling element in quirks-free
+     documents is documentElement, but authors commonly put it here) AND on
+     documentElement via a class the capture code's inline override must beat. */
+  html { scroll-behavior: smooth; }
+  body { margin: 0; scroll-behavior: smooth; }
+  section { height: 700px; padding: 24px; font: 700 48px system-ui, sans-serif; border-bottom: 4px solid #000; }
+  section:nth-child(odd) { background: #fde68a; }
+  section:nth-child(even) { background: #bfdbfe; }
+</style>
+</head>
+<body>
+  <section>SMOOTH 1</section><section>SMOOTH 2</section><section>SMOOTH 3</section>
+  <section>SMOOTH 4</section><section>SMOOTH 5</section><section>SMOOTH 6</section>
+</body>
+</html>

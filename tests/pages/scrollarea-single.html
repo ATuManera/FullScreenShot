@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scroll area — exactly one region</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px system-ui, sans-serif; background: #f8fafc; }
+  h1 { margin: 0; padding: 20px; background: #111827; color: #fff; font-size: 20px; }
+  p.note { padding: 12px 20px; margin: 0; color: #334155; }
+  .panel {
+    width: 640px; height: 360px; margin: 20px; overflow-y: auto;
+    border: 3px solid #2563eb; background: #fff;
+  }
+  .row {
+    height: 120px; padding: 16px; border-bottom: 2px dashed #94a3b8;
+    font: 700 32px ui-monospace, "SF Mono", monospace;
+  }
+  .row:nth-child(odd) { background: #eff6ff; }
+</style>
+</head>
+<body>
+  <h1>Exactly one internal scroll region</h1>
+  <p class="note">The popup must offer &ldquo;Scroll area / 1 scrollable region detected&rdquo; and capture directly, with no visual picker.</p>
+  <div class="panel" id="only-panel">
+    <div class="row">PANEL ROW 1</div>
+    <div class="row">PANEL ROW 2</div>
+    <div class="row">PANEL ROW 3</div>
+    <div class="row">PANEL ROW 4</div>
+    <div class="row">PANEL ROW 5</div>
+    <div class="row">PANEL ROW 6</div>
+    <div class="row">PANEL ROW 7</div>
+    <div class="row">PANEL ROW 8</div>
+    <div class="row">PANEL ROW 9</div>
+    <div class="row">PANEL ROW 10</div>
+    <div class="row">PANEL ROW 11</div>
+    <div class="row">PANEL ROW 12</div>
+    <div class="row">PANEL ROW 13</div>
+    <div class="row">PANEL ROW 14</div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scroll area — multiple regions</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px system-ui, sans-serif; background: #f8fafc; }
+  h1 { margin: 0; padding: 20px; background: #111827; color: #fff; font-size: 20px; }
+  p.note { padding: 12px 20px; margin: 0; color: #334155; }
+  .columns { display: flex; gap: 20px; padding: 20px; }
+  .panel { width: 480px; height: 340px; overflow-y: auto; border: 3px solid #2563eb; background: #fff; }
+  .panel.b { border-color: #16a34a; }
+  .row { height: 110px; padding: 14px; border-bottom: 2px dashed #94a3b8; font: 700 26px ui-monospace, "SF Mono", monospace; }
+  .panel.a .row:nth-child(odd) { background: #eff6ff; }
+  .panel.b .row:nth-child(odd) { background: #f0fdf4; }
+</style>
+</head>
+<body>
+  <h1>Two independent internal scroll regions</h1>
+  <p class="note">The popup must offer &ldquo;Choose scroll area… / 2 scrollable regions detected&rdquo; and open the visual picker. The capture must contain only the region that was clicked.</p>
+  <div class="columns">
+    <div class="panel a" id="panel-a">
+      <div class="row">ALPHA ROW 1</div>
+      <div class="row">ALPHA ROW 2</div>
+      <div class="row">ALPHA ROW 3</div>
+      <div class="row">ALPHA ROW 4</div>
+      <div class="row">ALPHA ROW 5</div>
+      <div class="row">ALPHA ROW 6</div>
+      <div class="row">ALPHA ROW 7</div>
+      <div class="row">ALPHA ROW 8</div>
+      <div class="row">ALPHA ROW 9</div>
+      <div class="row">ALPHA ROW 10</div>
+      <div class="row">ALPHA ROW 11</div>
+      <div class="row">ALPHA ROW 12</div>
+    </div>
+    <div class="panel b" id="panel-b">
+      <div class="row">BETA ROW 1</div>
+      <div class="row">BETA ROW 2</div>
+      <div class="row">BETA ROW 3</div>
+      <div class="row">BETA ROW 4</div>
+      <div class="row">BETA ROW 5</div>
+      <div class="row">BETA ROW 6</div>
+      <div class="row">BETA ROW 7</div>
+      <div class="row">BETA ROW 8</div>
+      <div class="row">BETA ROW 9</div>
+      <div class="row">BETA ROW 10</div>
+      <div class="row">BETA ROW 11</div>
+      <div class="row">BETA ROW 12</div>
+    </div>
+  </div>
+</body>
+</html>
