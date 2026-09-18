@@ -2,31 +2,60 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>FullScreenShot — Settings / About</title>
+  <title>FullScreenShot — Settings &amp; About</title>
+  <link rel="stylesheet" href="options.css" />
 </head>
 <body>
-  <main>
-    <h1>FullScreenShot</h1>
-    <section aria-labelledby="about-heading">
-      <h2 id="about-heading">About</h2>
-      <dl>
-        <dt>Project</dt>
-        <dd>FullScreenShot</dd>
-        <dt>Original project</dt>
-        <dd>ATuManera</dd>
-        <dt>Original author</dt>
-        <dd>Fernando Gallarday</dd>
-        <dt>Canonical repository</dt>
-        <dd><a href="https://github.com/ATuManera/FullScreenShot" target="_blank" rel="noopener">github.com/ATuManera/FullScreenShot</a></dd>
-        <dt>Version</dt>
-        <dd id="version"></dd>
-        <dt>License</dt>
-        <dd>MPL-2.0, Incompatible With Secondary Licenses</dd>
-        <dt>Privacy policy</dt>
-        <dd><a href="https://github.com/ATuManera/FullScreenShot/blob/main/PRIVACY.md" target="_blank" rel="noopener">PRIVACY.md</a></dd>
-      </dl>
-    </section>
-  </main>
+  <header class="page-header">
+    <img class="brand-icon" src="../icons/icon-48.png" width="40" height="40" alt="" />
+    <div>
+      <h1>FullScreenShot</h1>
+      <p class="muted" id="version-line">Version …</p>
+    </div>
+  </header>
+
+  <section id="settings" aria-labelledby="settings-heading">
+    <h2 id="settings-heading">Settings</h2>
+
+    <div class="setting-row" role="radiogroup" aria-labelledby="lazy-mode-heading">
+      <div>
+        <p class="setting-title" id="lazy-mode-heading">Full-page loading</p>
+        <p class="setting-desc">How FullScreenShot handles content that loads as you scroll.</p>
+      </div>
+      <div class="segmented">
+        <label class="segmented-option">
+          <input type="radio" name="lazy-mode" value="fast" checked />
+          <span>Fast</span>
+        </label>
+        <label class="segmented-option">
+          <input type="radio" name="lazy-mode" value="reliable" />
+          <span>Reliable</span>
+        </label>
+      </div>
+    </div>
+    <p class="muted setting-hint" id="lazy-mode-hint">Fast: capture immediately.</p>
+  </section>
+
+  <section id="about" aria-labelledby="about-heading">
+    <h2 id="about-heading">About</h2>
+    <p>Privacy-first full-page capture powered by Rust and WebAssembly.</p>
+
+    <dl class="about-list">
+      <dt>Original project</dt>
+      <dd>ATuManera</dd>
+      <dt>Original author</dt>
+      <dd>Fernando Gallarday</dd>
+      <dt>Repository</dt>
+      <dd><a href="https://github.com/ATuManera/FullScreenShot" target="_blank" rel="noopener">github.com/ATuManera/FullScreenShot</a></dd>
+      <dt>License</dt>
+      <dd>MPL-2.0-no-copyleft-exception</dd>
+      <dt>Privacy</dt>
+      <dd><a href="https://github.com/ATuManera/FullScreenShot/blob/main/PRIVACY.md" target="_blank" rel="noopener">PRIVACY.md</a></dd>
+    </dl>
+
+    <p class="muted small">100% local processing. No telemetry. No analytics. No cloud. No account required.</p>
+  </section>
+
   <script type="module" src="options.js"></script>
 </body>
 </html>

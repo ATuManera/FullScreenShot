@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <rect x="0" y="0" width="24" height="24" rx="5.5" fill="#4F46E5"/>
+
+  <!-- capture-frame corner brackets -->
+  <g stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round" fill="none">
+    <path d="M5.2 8.2 V6.3 A1 1 0 0 1 6.2 5.3 H8.1"/>
+    <path d="M15.9 5.3 H17.8 A1 1 0 0 1 18.8 6.3 V8.2"/>
+    <path d="M18.8 15.8 V17.7 A1 1 0 0 1 17.8 18.7 H15.9"/>
+    <path d="M8.1 18.7 H6.2 A1 1 0 0 1 5.2 17.7 V15.8"/>
+  </g>
+
+  <!-- vertical page, extending past the bottom bracket to cue full-page continuation -->
+  <rect x="9.7" y="7.4" width="4.6" height="12.6" rx="1" fill="#FFFFFF"/>
+  <rect x="10.7" y="9.6" width="2.6" height="0.9" rx="0.45" fill="#4F46E5"/>
+  <rect x="10.7" y="11.4" width="2.6" height="0.9" rx="0.45" fill="#4F46E5"/>
+  <rect x="10.7" y="13.2" width="1.7" height="0.9" rx="0.45" fill="#4F46E5"/>
+</svg>

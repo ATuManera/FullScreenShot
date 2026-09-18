@@ -19,8 +19,10 @@ mkdir -p "$DIST_DIR/popup" "$DIST_DIR/options" "$DIST_DIR/result" "$DIST_DIR/ico
 cp "$ROOT_DIR/extension/src/popup/popup.html" "$DIST_DIR/popup/popup.html"
 cp "$ROOT_DIR/extension/src/popup/popup.css" "$DIST_DIR/popup/popup.css"
 cp "$ROOT_DIR/extension/src/options/options.html" "$DIST_DIR/options/options.html"
+cp "$ROOT_DIR/extension/src/options/options.css" "$DIST_DIR/options/options.css"
 cp "$ROOT_DIR/extension/src/result/result.html" "$DIST_DIR/result/result.html"
 cp "$ROOT_DIR/extension/src/result/result.css" "$DIST_DIR/result/result.css"
+cp "$ROOT_DIR/extension/icons/icon-16.png" "$ROOT_DIR/extension/icons/icon-32.png" "$ROOT_DIR/extension/icons/icon-48.png" "$ROOT_DIR/extension/icons/icon-128.png" "$DIST_DIR/icons/"
 
 if [ -d "$ROOT_DIR/extension/wasm" ] && [ -f "$ROOT_DIR/extension/wasm/screenshot_wasm_bg.wasm" ]; then
   cp "$ROOT_DIR/extension/wasm/screenshot_wasm_bg.wasm" "$DIST_DIR/wasm/"
