@@ -115,8 +115,89 @@ longer available" (result payloads moved from `chrome.storage.session`
 - [ ] 33. Cancel a capture, then immediately start a new one — the new
       capture must be accepted, not rejected as "already capturing".
 
+## Final Chrome UX polish (`polish/final-chrome-ux`)
+
+Covers the 16px icon optical adjustment, the redesigned Result Page,
+and the popup progress-state cleanup. As with every section above,
+nothing here has been performed by the agent — Node/TypeScript tests
+and static inspection (see the branch's final report for exactly what
+*was* verified that way) cannot substitute for a real browser session.
+
+**Icon**
+
+- [ ] 34. Toolbar icon at real 16×16 size — camera recognition remains
+      strong (this was not touched), and the page tab peeking from
+      behind it is now perceptibly clearer than the previous build,
+      without the icon reading as a printer, scanner, floppy/save
+      icon, or badge.
+
+**Result Page**
+
+- [ ] 35. After any capture, the result tab shows the exact generated
+      filename prominently (long names wrap or ellipsize without
+      breaking the layout; hovering shows the full name via the title
+      tooltip).
+- [ ] 36. PNG result shows "PNG · <width> × <height>" matching the
+      actual captured image dimensions.
+- [ ] 37. PDF result shows the correct page size and orientation you
+      picked (Auto/A4/Letter, Portrait/Landscape).
+- [ ] 38. Markdown result shows just "Markdown" (no fabricated
+      dimensions).
+- [ ] 39. Before clicking Download: status reads "Capture complete",
+      the note "Chrome will use your configured download location" is
+      visible, and the TTL note "available for up to 15 minutes" is
+      visible — no specific filesystem path is ever shown anywhere.
+- [ ] 40. Click Download: status changes to "Download started" (never
+      "Downloaded successfully" or similar), the button becomes
+      "Download again", and a "Close" button appears.
+- [ ] 41. Click "Download again" — triggers a second, correct download
+      of the same file (browser's normal duplicate-filename handling
+      is fine).
+- [ ] 42. Click "Close" — the result tab closes. If it does *not*
+      close in your Chrome, confirm the fallback text "You can close
+      this tab when you're done." appears instead of a dead button.
+- [ ] 43. Reload the result tab (Cmd+R) *before* the 15-minute TTL —
+      the same result, filename, and metadata reappear correctly
+      (confirms this pass didn't regress the existing IndexedDB
+      persistence).
+- [ ] 44. Open a result URL whose id is expired or unknown (e.g. wait
+      out the TTL, or hand-edit the `id` query param) — shows "Result
+      expired" / "This temporary capture is no longer available." with
+      **no** Download button present anywhere.
+- [ ] 45. Preview: a very tall full-page PNG scrolls with the page
+      itself (not trapped in a small internal scrollbox), and is not
+      stretched/distorted.
+- [ ] 46. Result Page keyboard-only: Tab reaches Download, Download
+      again, and Close in a logical order, each with a visible focus
+      ring; status changes are announced (screen reader/VoiceOver, if
+      available).
+- [ ] 47. Result Page in macOS light mode and dark mode — filename,
+      status, and buttons all stay legible with no hard-coded white
+      surface glaring in dark mode.
+
+**Popup**
+
+- [ ] 48. Idle popup (just opened, nothing started) — no progress bar,
+      no Cancel button, anywhere.
+- [ ] 49. Start Full page capture — progress bar and Cancel appear;
+      status text never reads "Locating scroll area…" for this mode.
+- [ ] 50. Start Scroll area capture with multiple candidates — the
+      on-page picker appears; status text appropriately reflects
+      scroll-area selection, not a generic capture progress number
+      until an area is actually chosen.
+- [ ] 51. Let a capture finish (any mode) — progress bar and Cancel
+      disappear immediately after; no leftover progress text or
+      disabled controls.
+- [ ] 52. Trigger an error (e.g. capture a protected page mid-flow if
+      possible, or disconnect and retry) — progress bar and Cancel
+      disappear; only the friendly error notice remains.
+- [ ] 53. With one capture already running (e.g. started from another
+      window), open a second popup and press the primary button — see
+      "Capture already running", and the progress text reflects the
+      real in-progress capture (not a stuck "Preparing…").
+
 ## Sign-off
 
 This checklist may only be marked complete by Fernando Gallarday after
 physically running it. No automated report may claim "PASS" on any of
-these 33 items.
+these 53 items.
