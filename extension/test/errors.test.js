@@ -32,15 +32,40 @@ test("unrecognized errors fall back to a generic, still-human message", () => {
   assert.doesNotMatch(friendly.body, /TypeError|undefined/);
 });
 
+// Regression coverage (fix/ux-capture-runtime-regression): a stale
+// `chrome.runtime.connect` port threw this exact string uncaught in
+// popup.ts before the sendMessage-based transport replaced it. The
+// mapper must still neutralize it even though the transport itself no
+// longer produces it directly — sendMessage failures are routed
+// through the same "disconnected port object" sentinel so this class
+// of error always gets the same friendly, recoverable copy.
+test("maps the disconnected-port regression string to a friendly, recoverable message, never verbatim", () => {
+  const friendly = mapBrowserError("Attempting to use a disconnected port object");
+  assert.equal(friendly.title, "Capture connection interrupted");
+  assert.doesNotMatch(friendly.title, /disconnected port/i);
+  assert.doesNotMatch(friendly.body, /disconnected port/i);
+});
+
+test("maps a sendMessage-with-no-receiver failure to the same connection-lost message", () => {
+  const friendly = mapBrowserError("Could not establish connection. Receiving end does not exist.");
+  assert.equal(friendly.title, "Capture connection interrupted");
+});
+
+test("maps an extension-context-invalidated failure (extension reloaded mid-use) to the connection-lost message", () => {
+  const friendly = mapBrowserError("Extension context invalidated.");
+  assert.equal(friendly.title, "Capture connection interrupted");
+});
+
 test("never leaks raw technical vocabulary into the body for any mapped case", () => {
   const rawMessages = [
     "Error: The extensions gallery cannot be scripted.",
     "executeScript failed: permission denied",
     "Uncaught ReferenceError: x is not defined\n  at <anonymous>:1:1",
+    "Uncaught Error: Attempting to use a disconnected port object",
   ];
   for (const raw of rawMessages) {
     const friendly = mapBrowserError(raw);
-    assert.doesNotMatch(friendly.title, /stack|executeScript|ReferenceError/i);
-    assert.doesNotMatch(friendly.body, /stack|executeScript|ReferenceError/i);
+    assert.doesNotMatch(friendly.title, /stack|executeScript|ReferenceError|disconnected port/i);
+    assert.doesNotMatch(friendly.body, /stack|executeScript|ReferenceError|disconnected port/i);
   }
 });
