@@ -2,7 +2,7 @@
   "name": "fullscreenshot-extension",
   "version": "0.1.0",
   "private": true,
-  "license": "MPL-2.0",
+  "license": "MPL-2.0-no-copyleft-exception",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
