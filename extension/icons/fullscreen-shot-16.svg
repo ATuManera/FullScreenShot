@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <title>FullScreenShot (16px optical variant)</title>
+  <!--
+    Optically adjusted for the 16px toolbar raster only — NOT a scaled
+    copy of fullscreen-shot.svg. Same camera (body/bump/lens) as the
+    master; only the page tab is enlarged (34x64 vs the master's
+    30x60, shifted up-left by 4px) so it survives 16px downscaling as
+    a clearly separate rectangle instead of thinning into a 1px sliver.
+    32/48/128 keep using the unmodified master SVG.
+  -->
+  <rect x="0" y="0" width="128" height="128" rx="24" fill="#4F46E5"/>
+  <rect x="64" y="56" width="34" height="64" rx="7" fill="#FFFFFF"/>
+  <rect x="38" y="24" width="30" height="19" rx="6" fill="#FFFFFF"/>
+  <rect x="10" y="40" width="86" height="60" rx="13" fill="#FFFFFF"/>
+  <circle cx="53" cy="70" r="21" fill="#4F46E5"/>
+</svg>
