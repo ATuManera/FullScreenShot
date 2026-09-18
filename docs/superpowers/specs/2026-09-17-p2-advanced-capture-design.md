@@ -47,6 +47,27 @@ dependencias (P5).
   vive en TypeScript (es una política de UX/timing, no geometría pura) pero
   la *detección* de "altura sigue creciendo" es una comparación numérica
   simple, testeable sin DOM.
+- **Revisado**: la preferencia Fast/Reliable se persistía y se mostraba, pero
+  no llegaba a la captura — `START_CAPTURE` no tenía campo para ella, el popup
+  no la leía y el background llamaba a `captureFullPage(..., "fast", ...)`
+  incondicionalmente. Ahora `lazyMode` viaja en el mensaje (campo ausente →
+  default documentado, igual que el resto de campos opcionales del contrato;
+  campo presente con valor no reconocido → se rechaza el mensaje entero, para
+  que un mensaje suplantado no pueda elegir la ruta de captura).
+- **Revisado**: la decisión por pasada de seguir o parar se leía de
+  `classifyPrescrollOutcome`, que responde otra pregunta ("al llegar al
+  límite, ¿seguía creciendo?") y devuelve `"settled"` para cualquier número de
+  muestras por debajo del límite. Consultarla en cada pasada cortaba siempre
+  tras exactamente dos, por mucho contenido que siguiera llegando, y dejaba el
+  veredicto de scroll infinito inalcanzable, porque alcanzarlo exige las
+  muestras que el bucle nunca llegaba a reunir. La decisión por pasada es
+  ahora `isStillGrowing` — el predicado que existe justamente para eso y ya
+  estaba testeado — y el veredicto de límite alcanzado queda después del
+  bucle. El límite sigue siendo de ocho pasadas.
+- El plan de captura se sigue midiendo **después** del pre-scroll, así que el
+  contenido que solo aparece al pre-scrollear entra en la altura desde la que
+  se planifica, y el pre-scroll termina con un scroll verificado al tope para
+  que el primer tile sea la verdadera cabecera de la página.
 
 ## Decisiones revisadas (reparación de runtime)
 
@@ -123,3 +144,4 @@ discrepar.
 | 2026-09-17 | `3187cbd`         | Creación del spec P2                                                                                                                                                                                                                          |
 | 2026-09-17 | `52cfc50`         | Implementación completa de P2: Selected Scroll Area con selección interactiva verificada en Chromium real, modo Reliable de lazy-loading con detección de scroll infinito, límite de seguridad de tiles, lane de tests Node sin dependencias. |
 | 2026-09-18 | `02ad6b7`, `273172d` | Reparación de runtime de Selected Scroll Area: ciclo de vida de selección serializable y terminal (mensaje + desenlace único + limpieza del lado de la página), contenedor traído a la vista con banda visible real, y restauración completa de `scrollTop`, marcador y scroll de página. Verificado en Chromium real con `tests/pages/scrollarea-single.html` y `tests/pages/scrollarea-multiple.html`. |
+| 2026-09-18 | `98780c2` | Reliable mode cableado de extremo a extremo (`lazyMode` en el contrato `START_CAPTURE`, validado y propagado hasta `captureFullPage`) y reparación de la condición de parada del pre-scroll. Verificado en Chromium con `tests/pages/lazy-fullpage-acceptance.html`: Fast 1200x2100 con 3 secciones, Reliable 1200x4200 con 6. |

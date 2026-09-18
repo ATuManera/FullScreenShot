@@ -55,13 +55,41 @@ Explícitamente fuera de P1:
 ## Estrategia de fixed/sticky (decisión de diseño)
 
 Un elemento `position: fixed` no tiene una "posición de contenido" única —
-está anclado al viewport, no al scroll. La estrategia (reversible, documentada
-en sección 14 del prompt maestro): antes de capturar el tile 2..N, ocultar
-temporalmente (vía un atributo de datos + `visibility:hidden`, nunca remover
-del DOM) los elementos fixed/sticky detectados; restaurar su visibilidad
-inmediatamente después de cada captura. El primer tile se captura con los
-elementos visibles, de forma que la salida final los conserva una sola vez,
-en su posición natural (arriba de la página).
+está anclado al viewport, no al scroll. La estrategia sigue siendo reversible
+(atributo de datos + `visibility:hidden`, nunca remover del DOM, restaurado
+tras cada captura), pero la regla original — "ocultar en los tiles 2..N y
+mostrar todo en el primero" — resultó incompleta: la salida conserva de cada
+tile solo la banda hasta el origen del tile siguiente, y una barra anclada
+abajo vive justo en la parte del primer viewport que el stitcher descarta.
+Medido sobre `tests/pages/fullpage-acceptance.html`: el sticky header aparecía
+una vez en las filas 0-55 y el footer fixed **no aparecía en absoluto** — ni
+duplicado ni conservado.
+
+La regla revisada decide por **anclaje**, no por índice de tile:
+
+- **TOP** (barra contra el borde superior): visible en la primera banda
+  retenida, oculta en el resto.
+- **BOTTOM** (barra contra el borde inferior): oculta en todas las bandas
+  salvo la última, que es el único lugar donde puede aparecer exactamente una
+  vez (es el único tile del que se conserva el viewport completo).
+- **OTHER** (widget flotante, overlay centrado, elemento demasiado estrecho
+  para ser una barra o tan alto como el viewport): conserva el tratamiento de
+  siempre, sin inventar semántica nueva.
+
+`classifyFixedAnchor` (sticky.ts, puro y testeado; espejado dentro del
+inyectable) clasifica por geometría y no por los valores computados de
+`top`/`bottom`: los autores escriben `top: 8px` o `calc()`, y Chrome devuelve
+valores *usados* para elementos posicionados, así que el lado declarado no es
+una señal fiable.
+
+La banda final se **vuelve a capturar** con solo los elementos BOTTOM
+visibles, en lugar de decidir por adelantado cuál será el último tile. El
+bucle no puede saberlo mientras todavía descarta offsets que Chrome clampea
+sobre un viewport ya capturado, y en una página que crece durante la captura
+una conjetura pegaría el footer en mitad de la imagen. La captura extra se
+omite por completo cuando la página no tiene ninguna barra anclada abajo, que
+es el caso abrumadoramente mayoritario. Una captura de un solo viewport
+conserva todo, porque la salida *es* el viewport.
 
 ## Estrategia de stitching (decisión de diseño)
 
@@ -196,3 +224,4 @@ del entorno de este agente — ver nota en el gate):
 | 2026-09-17 | `46b59f0`                                  | Creación del spec P1                                                                                                                                                                                                                                                                                                                                    |
 | 2026-09-17 | `1deba96`, `0e97ac8`, `ba539eb`, `9919879` | Implementación completa de P1: rate limiter, compositor streaming, PNG streaming real, bridge WASM ampliado (composeFullPagePng, RateLimiter), capa capture/ del navegador (geometry/sticky/state/injectable/orchestrator), mensajería background↔popup, página de resultado sin permiso `downloads`. Verificado con Playwright contra fixtures reales. |
 | 2026-09-18 | `5ca678d`, `273172d`                          | Reparación de runtime de Full Page: verificación de la posición de scroll alcanzada antes de componer, descarte de tiles clampeados, aborto ante página que no scrollea, y salvaguarda de tiles idénticos. Reproducido y verificado en Chromium real con `tests/pages/scroll-jacked-page.html` y `tests/pages/fullpage-acceptance.html`. |
+| 2026-09-18 | `ede00b7`                                   | Política de elementos fijos por anclaje: TOP en la primera banda retenida, BOTTOM en la última (mediante recaptura de esa banda), OTHER sin cambios. Cierra la pérdida del footer fixed. Verificado en Chromium con `fullpage-acceptance.html` y `fixed-elements.html` a DPR 1 y 2. |
