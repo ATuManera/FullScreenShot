@@ -85,8 +85,38 @@ be fixed before the next pass.
       inside an actual captured image (check items 8 and 5 closely —
       the overlay/outline must be gone before the screenshot is taken).
 
+## Regression checks — capture runtime repair (`fix/ux-capture-runtime-regression`)
+
+Added after the first physical pass found all three capture paths
+broken with "Uncaught Error: Attempting to use a disconnected port
+object" (popup messaging moved from a long-lived
+`chrome.runtime.connect` port to `chrome.runtime.sendMessage` /
+`chrome.runtime.onMessage`) and results occasionally showing "no
+longer available" (result payloads moved from `chrome.storage.session`
++ base64 to an IndexedDB-backed store, no longer deleted on read).
+
+- [ ] 28. Capture Visible area, Full page, and a Scroll area **each at
+      least twice in a row**, in the same popup session, without
+      reloading the extension — confirms no stale-connection error
+      reappears on a second or third capture.
+- [ ] 29. Open the popup, wait at least 30 seconds without clicking
+      anything (long enough for the service worker to plausibly go
+      idle), then start a capture — must start normally, not throw a
+      raw connection error.
+- [ ] 30. After a capture finishes and its result tab opens, **reload
+      that result tab** (Cmd+R) — the preview and Download button must
+      still work identically, not show "no longer available".
+- [ ] 31. Leave a finished result tab open and idle for a few minutes,
+      then try Download — must still work (results are not deleted
+      merely by having been viewed once).
+- [ ] 32. Start a capture, close the popup immediately, reopen it —
+      progress/busy state must reconstruct correctly (not idle, not a
+      duplicate capture started).
+- [ ] 33. Cancel a capture, then immediately start a new one — the new
+      capture must be accepted, not rejected as "already capturing".
+
 ## Sign-off
 
 This checklist may only be marked complete by Fernando Gallarday after
 physically running it. No automated report may claim "PASS" on any of
-these 27 items.
+these 33 items.
