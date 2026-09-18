@@ -24,6 +24,7 @@ test("accepts a well-formed START_CAPTURE message with all fields", () => {
     pdfPageSize: "a4",
     pdfOrientation: "landscape",
     markdownMode: "full-dom",
+    lazyMode: "reliable",
   };
   assert.deepEqual(parseInboundMessage(msg), msg);
 });
@@ -37,7 +38,28 @@ test("fills in defaults when optional fields are omitted", () => {
     pdfPageSize: "auto",
     pdfOrientation: "portrait",
     markdownMode: "article",
+    lazyMode: "fast",
   });
+});
+
+test("carries an explicit fast lazy mode through unchanged", () => {
+  const result = parseInboundMessage({ type: "START_CAPTURE", mode: "fullpage", lazyMode: "fast" });
+  assert.equal(result.lazyMode, "fast");
+});
+
+test("carries an explicit reliable lazy mode through unchanged", () => {
+  // The regression this pins: the value used to stop at the popup, and the
+  // background hard-coded "fast" regardless of what the user had chosen.
+  const result = parseInboundMessage({ type: "START_CAPTURE", mode: "fullpage", lazyMode: "reliable" });
+  assert.equal(result.lazyMode, "reliable");
+});
+
+test("rejects START_CAPTURE carrying an unrecognised lazy mode", () => {
+  // Present-but-invalid is refused outright rather than coerced to a default,
+  // so a spoofed message cannot pick the capture path.
+  assert.equal(parseInboundMessage({ type: "START_CAPTURE", mode: "fullpage", lazyMode: "thorough" }), null);
+  assert.equal(parseInboundMessage({ type: "START_CAPTURE", mode: "fullpage", lazyMode: true }), null);
+  assert.equal(parseInboundMessage({ type: "START_CAPTURE", mode: "fullpage", lazyMode: { toString: () => "fast" } }), null);
 });
 
 test("rejects null", () => {
@@ -85,6 +107,7 @@ test("rejects START_CAPTURE with a prototype-pollution-shaped mode", () => {
     pdfPageSize: "auto",
     pdfOrientation: "portrait",
     markdownMode: "article",
+    lazyMode: "fast",
   });
   // The parsed result must be a clean object; prototype pollution
   // payloads targeting Object.prototype must not have actually mutated

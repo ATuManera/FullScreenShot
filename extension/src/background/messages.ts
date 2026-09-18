@@ -31,6 +31,13 @@ export type ExportFormat = "png" | "pdf";
 export type PdfPageSize = "a4" | "letter" | "auto";
 export type PdfOrientation = "portrait" | "landscape";
 export type MarkdownExportMode = "article" | "full-dom";
+/**
+ * How much work Full Page does to bring lazy/dynamic content in before it
+ * starts capturing. Mirrors `LazyModePreference` in popup/preferences.ts (the
+ * persisted setting) and `LazyMode` in capture/orchestrator.ts (what the
+ * capture loop takes) — this is the value's shape while it is in transit.
+ */
+export type LazyCaptureMode = "fast" | "reliable";
 
 export interface StartCaptureMessage {
   type: "START_CAPTURE";
@@ -39,6 +46,14 @@ export interface StartCaptureMessage {
   pdfPageSize: PdfPageSize;
   pdfOrientation: PdfOrientation;
   markdownMode: MarkdownExportMode;
+  /**
+   * Carried explicitly rather than re-read from storage by the background:
+   * the capture must use the setting as it stood when the user pressed the
+   * button, and the background has no business reaching into the popup's
+   * preferences. Omitting this field used to be the only option, which is
+   * precisely why Reliable had no effect — the background hard-coded "fast".
+   */
+  lazyMode: LazyCaptureMode;
 }
 
 export interface CancelMessage {
@@ -128,6 +143,10 @@ function isMarkdownExportMode(value: unknown): value is MarkdownExportMode {
   return value === "article" || value === "full-dom";
 }
 
+function isLazyCaptureMode(value: unknown): value is LazyCaptureMode {
+  return value === "fast" || value === "reliable";
+}
+
 /** Validates an untrusted message received on the capture port. */
 export function parseInboundMessage(raw: unknown): InboundMessage | null {
   if (typeof raw !== "object" || raw === null || !("type" in raw)) {
@@ -146,8 +165,12 @@ export function parseInboundMessage(raw: unknown): InboundMessage | null {
     const pdfPageSize = candidate.pdfPageSize ?? "auto";
     const pdfOrientation = candidate.pdfOrientation ?? "portrait";
     const markdownMode = candidate.markdownMode ?? "article";
-    if (isCaptureMode(mode) && isExportFormat(exportFormat) && isPdfPageSize(pdfPageSize) && isPdfOrientation(pdfOrientation) && isMarkdownExportMode(markdownMode)) {
-      return { type: "START_CAPTURE", mode, exportFormat, pdfPageSize, pdfOrientation, markdownMode };
+    // An absent field takes the documented default (same rule every other
+    // optional field here follows); a *present but unrecognised* one rejects
+    // the whole message rather than being quietly coerced.
+    const lazyMode = candidate.lazyMode ?? "fast";
+    if (isCaptureMode(mode) && isExportFormat(exportFormat) && isPdfPageSize(pdfPageSize) && isPdfOrientation(pdfOrientation) && isMarkdownExportMode(markdownMode) && isLazyCaptureMode(lazyMode)) {
+      return { type: "START_CAPTURE", mode, exportFormat, pdfPageSize, pdfOrientation, markdownMode, lazyMode };
     }
   }
   return null;

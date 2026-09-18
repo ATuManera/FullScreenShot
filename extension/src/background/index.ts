@@ -190,7 +190,7 @@ async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (mes
     return captureVisible(tabId);
   }
   if (msg.mode === "fullpage") {
-    return captureFullPage(tabId, onProgress, isCancelled, "fast", msg.exportFormat, {
+    return captureFullPage(tabId, onProgress, isCancelled, msg.lazyMode, msg.exportFormat, {
       pageSize: msg.pdfPageSize,
       orientation: msg.pdfOrientation,
     });

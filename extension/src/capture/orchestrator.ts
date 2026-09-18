@@ -10,7 +10,7 @@
  */
 import { isCapturableUrl, measurePage, type PageMetrics } from "./geometry.js";
 import { applyFixedElementVisibility, restoreFixedAndStickyElements, type FixedElementCensus, type FixedVisibilityMode } from "./injectable.js";
-import { classifyPrescrollOutcome, DEFAULT_MAX_PRESCROLL_PASSES } from "./lazy.js";
+import { classifyPrescrollOutcome, isStillGrowing, DEFAULT_MAX_PRESCROLL_PASSES } from "./lazy.js";
 import { extractMarkdownAst, type MarkdownMode } from "./markdown.js";
 import {
   positionContainerBand,
@@ -537,12 +537,21 @@ async function recaptureFinalBandWithBottomElements(
 }
 
 /**
- * "Reliable" lazy-loading mode: scrolls to the bottom and back up to the
- * top repeatedly (bounded by `DEFAULT_MAX_PRESCROLL_PASSES`), re-measuring
- * `scrollHeight` each pass, to give `img[loading=lazy]` and similar
- * dynamic content a chance to load before the real tile-by-tile capture
- * begins. Throws `PossiblyInfiniteScrollError` rather than looping forever
- * if the page keeps growing right up to the pass limit.
+ * "Reliable" lazy-loading mode: scrolls to the bottom repeatedly (bounded by
+ * `DEFAULT_MAX_PRESCROLL_PASSES`), re-measuring `scrollHeight` each pass, to
+ * give `img[loading=lazy]` and content that appends as you reach the bottom a
+ * chance to arrive before the real tile-by-tile capture begins. Throws
+ * `PossiblyInfiniteScrollError` rather than looping forever if the page keeps
+ * growing right up to the pass limit, and always leaves the page verifiably
+ * back at the top, because the capture plan is measured after this returns.
+ *
+ * Whether to keep going is `isStillGrowing`'s decision. It used to be read off
+ * `classifyPrescrollOutcome`, which answers a different question — "at the
+ * pass limit, was it still growing?" — and returns "settled" for any sample
+ * count below the limit. Consulting it per pass therefore broke out after
+ * exactly two passes on every page, however much content was still arriving,
+ * and made the infinite-scroll verdict unreachable, since reaching it needs
+ * the full complement of samples the loop never collected.
  */
 async function runReliablePrescroll(tabId: number, onProgress: ProgressCallback, isCancelled: () => boolean): Promise<void> {
   const samples: number[] = [];
@@ -569,14 +578,17 @@ async function runReliablePrescroll(tabId: number, onProgress: ProgressCallback,
     });
     await sleep(250);
 
-    const outcome = classifyPrescrollOutcome(samples, DEFAULT_MAX_PRESCROLL_PASSES);
-    if (outcome === "settled" && samples.length >= 2) {
+    // `samples[i]` is the height before pass `i` scrolled, so the first
+    // comparison possible is after two passes: it says whether the previous
+    // pass's trip to the bottom brought anything new in.
+    if (samples.length >= 2 && !isStillGrowing(samples)) {
       break;
     }
-    if (outcome === "possibly-infinite" && samples.length >= DEFAULT_MAX_PRESCROLL_PASSES) {
-      await chrome.scripting.executeScript({ target: { tabId }, func: (y: number) => window.scrollTo(0, y), args: [0] });
-      throw new PossiblyInfiniteScrollError();
-    }
+  }
+
+  if (classifyPrescrollOutcome(samples, DEFAULT_MAX_PRESCROLL_PASSES) === "possibly-infinite") {
+    await chrome.scripting.executeScript({ target: { tabId }, func: scrollWindowToVerified, args: [0] });
+    throw new PossiblyInfiniteScrollError();
   }
   // The real capture starts from its first planned tile, so the pre-scroll
   // must leave the page verifiably back at the top rather than wherever the

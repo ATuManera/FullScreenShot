@@ -78,10 +78,10 @@ function makeChromeStub() {
   };
 }
 
-function start(mode) {
+function start(mode, lazyMode = "fast") {
   return new Promise((resolve) => {
     onMessage(
-      { type: "START_CAPTURE", mode, exportFormat: "png", pdfPageSize: "auto", pdfOrientation: "portrait", markdownMode: "article" },
+      { type: "START_CAPTURE", mode, exportFormat: "png", pdfPageSize: "auto", pdfOrientation: "portrait", markdownMode: "article", lazyMode },
       {},
       resolve,
     );
@@ -195,6 +195,60 @@ test("a failed scroll-area capture still releases the container it marked", asyn
   assert.ok(injected.includes("restore"), "expected the page scroll to be restored");
 });
 
+// --- Reliable lazy mode wiring -------------------------------------------
+// The regression: the background called `captureFullPage(..., "fast", ...)`
+// unconditionally, so the options-page setting was persisted, displayed, and
+// then thrown away. Serialization tests alone would not have caught it — the
+// value has to be observed arriving at the capture loop.
+
+test("Fast does not pre-scroll: the page is measured once, for the plan", async () => {
+  resetStub();
+  await start("fullpage", "fast");
+  await settle();
+  assert.equal(countOf("measurePage"), 1, "Fast must measure only to build the capture plan");
+});
+
+test("Reliable pre-scrolls before capturing, re-measuring as content loads", async () => {
+  resetStub();
+  await start("fullpage", "reliable");
+  await settle();
+  assert.ok(countOf("measurePage") > 1, "Reliable must re-measure the page during pre-scroll");
+});
+
+test("Reliable measures the capture plan after the pre-scroll, not before", async () => {
+  // Lazy content that only appears while pre-scrolling has to be inside the
+  // height the plan is built from, or the capture stops short of it.
+  resetStub();
+  await start("fullpage", "reliable");
+  await settle();
+  const lastMeasure = injected.lastIndexOf("measurePage");
+  const firstTileScroll = injected.findIndex((n, i) => n === "scrollWindowToVerified" && i > lastMeasure);
+  assert.ok(firstTileScroll > lastMeasure, "the plan's measurement must come after pre-scrolling");
+});
+
+test("Reliable returns the page to the top, verified, before the first tile", async () => {
+  resetStub();
+  await start("fullpage", "reliable");
+  await settle();
+  const scrolls = injectedCalls.filter((c) => c.name === "scrollWindowToVerified");
+  assert.ok(scrolls.length >= 2, "expected a pre-scroll reset plus the first tile");
+  assert.equal(scrolls[0].args[0], 0, "the pre-scroll must end back at the page top");
+  const lastMeasure = injected.lastIndexOf("measurePage");
+  const firstTile = injectedCalls.findIndex((c, i) => c.name === "scrollWindowToVerified" && i > lastMeasure);
+  assert.equal(injectedCalls[firstTile].args[0], 0, "the first captured tile must be the page top");
+});
+
+test("an unrecognised lazy mode never reaches the capture loop", async () => {
+  resetStub();
+  const ack = await new Promise((resolve) => {
+    const handled = onMessage({ type: "START_CAPTURE", mode: "fullpage", lazyMode: "turbo" }, {}, resolve);
+    if (handled === false) resolve(undefined);
+  });
+  assert.equal(ack, undefined, "a message with an invalid lazy mode must be ignored outright");
+  await settle();
+  assert.deepEqual(injected, [], "no capture may start from a rejected message");
+});
+
 // --- Fixed-element band policy -------------------------------------------
 
 test("each tile declares which anchored elements belong in its band", async () => {
@@ -213,3 +267,24 @@ test("hidden fixed elements are restored after every tile, not only later ones",
   assert.ok(countOf("restoreFixedAndStickyElements") >= 1, "expected fixed/sticky restoration");
 });
 
+test("Reliable keeps pre-scrolling while the page is still growing", async () => {
+  // Consulting the wrong predicate made this stop after two passes no matter
+  // how much content was still arriving, so lazy sections past the second
+  // trip to the bottom never made it into the capture plan.
+  resetStub();
+  measureHeights = [3000, 3600, 4200, 4800, 4800, 4800, 4800, 4800, 4800];
+  await start("fullpage", "reliable");
+  await settle();
+  assert.ok(countOf("measurePage") > 3, `expected pre-scrolling to continue while growing, saw ${countOf("measurePage")} measurements`);
+});
+
+test("Reliable stops a page that never stops growing, instead of scrolling forever", async () => {
+  resetStub();
+  measureHeights = Array.from({ length: 40 }, (_, i) => 3000 + i * 600);
+  await start("fullpage", "reliable");
+  await settle();
+  const failure = broadcasts.find((m) => m.type === "ERROR");
+  assert.ok(failure, "expected the capture to end with an error");
+  assert.match(failure.message, /infinite scroll/i);
+  assert.equal(captureCalls, 0, "no tile should be captured from a page that never settles");
+});

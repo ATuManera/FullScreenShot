@@ -6,7 +6,7 @@ import { detectScrollCandidates } from "../capture/scrollDetectionInjectable.js"
 import { rankAndDeduplicate, classifyScrollAreaUiState } from "../capture/scrollAnalysis.js";
 import { type CaptureMode, type ExportFormat, type InboundMessage, type MarkdownExportMode, type OutboundMessage, type PdfOrientation, type PdfPageSize } from "../background/messages.js";
 import { mapBrowserError, type FriendlyError } from "./errors.js";
-import { loadPreferences, savePreferences } from "./preferences.js";
+import { DEFAULT_PREFERENCES, loadPreferences, savePreferences, type LazyModePreference } from "./preferences.js";
 import { progressStateForMessage, type ProgressUiState } from "./progressView.js";
 
 const PROTECTED_PAGE: FriendlyError = {
@@ -186,8 +186,17 @@ async function analyzeScrollAreas(tabId: number): Promise<void> {
 }
 
 // --- Preferences ----------------------------------------------------------
+/**
+ * Full-page loading mode lives in the options page, not here, so the popup
+ * has no control bound to it — but it still has to travel with the capture
+ * request. Held from the load below so the value sent is the one in force
+ * when the button is pressed.
+ */
+let lazyMode: LazyModePreference = DEFAULT_PREFERENCES.lazyMode;
+
 async function applyStoredPreferences(): Promise<void> {
   const prefs = await loadPreferences();
+  lazyMode = prefs.lazyMode;
   setChecked(exportFormatRadios(), prefs.exportFormat);
   setChecked(pdfPageSizeRadios(), prefs.pdfPageSize);
   setChecked(pdfOrientationRadios(), prefs.pdfOrientation);
@@ -324,6 +333,7 @@ async function startCapture(mode: CaptureMode): Promise<void> {
     pdfPageSize,
     pdfOrientation,
     markdownMode,
+    lazyMode,
   });
 
   if (response === null) {
