@@ -19,19 +19,6 @@ function mimeTypeOf(dataUrl: string): string {
   return match?.[1] ?? "application/octet-stream";
 }
 
-function filenameFor(mimeType: string): string {
-  switch (mimeType) {
-    case "image/png":
-      return "fullscreenshot.png";
-    case "application/pdf":
-      return "fullscreenshot.pdf";
-    case "text/markdown":
-      return "fullscreenshot.md";
-    default:
-      return "fullscreenshot.bin";
-  }
-}
-
 async function dataUrlToText(dataUrl: string): Promise<string> {
   const res = await fetch(dataUrl);
   return res.text();
@@ -46,11 +33,13 @@ async function main(): Promise<void> {
   }
 
   const stored = await chrome.storage.session.get(id);
-  const dataUrl = stored[id];
+  const entry = stored[id] as { dataUrl?: unknown; filename?: unknown } | undefined;
+  const dataUrl = entry?.dataUrl;
   if (typeof dataUrl !== "string") {
     setStatus("This result is no longer available (it may have already been viewed, or the browser session ended).");
     return;
   }
+  const filename = typeof entry?.filename === "string" ? entry.filename : "fullscreenshot.bin";
 
   const mimeType = mimeTypeOf(dataUrl);
 
@@ -58,8 +47,8 @@ async function main(): Promise<void> {
     previewWrap.hidden = false;
     downloadLink.hidden = false;
     downloadLink.href = dataUrl;
-    downloadLink.download = filenameFor(mimeType);
-    downloadLink.textContent = `Download ${filenameFor(mimeType).split(".").pop()?.toUpperCase()}`;
+    downloadLink.download = filename;
+    downloadLink.textContent = `Download ${filename.split(".").pop()?.toUpperCase()}`;
 
     if (mimeType === "image/png" && imagePreview) {
       imagePreview.src = dataUrl;

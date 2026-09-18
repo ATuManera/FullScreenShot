@@ -30,11 +30,18 @@ export interface CancelMessage {
   type: "CANCEL";
 }
 
-export type InboundMessage = StartCaptureMessage | CancelMessage;
+/** Sent when the popup (re)opens, to reconstruct UI state if a capture is already running. */
+export interface GetStateMessage {
+  type: "GET_STATE";
+}
+
+export type InboundMessage = StartCaptureMessage | CancelMessage | GetStateMessage;
 
 export interface ProgressMessage {
   type: "PROGRESS";
-  status: string;
+  text: string;
+  current?: number;
+  total?: number;
 }
 
 export interface DoneMessage {
@@ -50,6 +57,7 @@ export interface CancelledMessage {
 
 export interface ErrorMessage {
   type: "ERROR";
+  /** Raw technical message — the popup maps this to friendly copy for display and logs the raw text to console. */
   message: string;
 }
 
@@ -57,7 +65,27 @@ export interface NoContainerSelectedMessage {
   type: "NO_CONTAINER_SELECTED";
 }
 
-export type OutboundMessage = ProgressMessage | DoneMessage | CancelledMessage | ErrorMessage | NoContainerSelectedMessage;
+/** A capture is already running (in this or another popup instance); the new request was refused, not queued. */
+export interface AlreadyCapturingMessage {
+  type: "ALREADY_CAPTURING";
+}
+
+/** Reply to GetStateMessage: whether a capture is active right now, and its last known progress. */
+export interface StateMessage {
+  type: "STATE";
+  active: boolean;
+  mode?: CaptureMode;
+  progress?: { text: string; current?: number; total?: number };
+}
+
+export type OutboundMessage =
+  | ProgressMessage
+  | DoneMessage
+  | CancelledMessage
+  | ErrorMessage
+  | NoContainerSelectedMessage
+  | AlreadyCapturingMessage
+  | StateMessage;
 
 function isCaptureMode(value: unknown): value is CaptureMode {
   return value === "visible" || value === "fullpage" || value === "scrollarea" || value === "markdown";
@@ -87,6 +115,9 @@ export function parseInboundMessage(raw: unknown): InboundMessage | null {
   const candidate = raw as Record<string, unknown>;
   if (candidate.type === "CANCEL") {
     return { type: "CANCEL" };
+  }
+  if (candidate.type === "GET_STATE") {
+    return { type: "GET_STATE" };
   }
   if (candidate.type === "START_CAPTURE") {
     const mode = candidate.mode;

@@ -118,7 +118,13 @@ function encodeComposite(
   return { bytes, mimeType: "image/png" };
 }
 
-export type ProgressCallback = (status: string) => void;
+/** `current`/`total` are omitted when progress isn't meaningfully countable (e.g. "Preparing…"). */
+export interface CaptureProgress {
+  text: string;
+  current?: number;
+  total?: number;
+}
+export type ProgressCallback = (progress: CaptureProgress) => void;
 
 let wasmReady: Promise<unknown> | null = null;
 function ensureWasm(): Promise<unknown> {
@@ -234,7 +240,7 @@ export async function captureFullPage(
   await ensureWasm();
   const tab = await getCapturableTab(tabId);
 
-  onProgress("Preparing…");
+  onProgress({ text: "Preparing…" });
   const [{ result: snapshot }] = (await chrome.scripting.executeScript({
     target: { tabId },
     func: begin,
@@ -264,7 +270,7 @@ export async function captureFullPage(
       if (isCancelled()) {
         throw new CaptureCancelledError();
       }
-      onProgress(`Capturing ${i + 1}/${offsets.length}…`);
+      onProgress({ text: `Capturing ${i + 1} of ${offsets.length}…`, current: i + 1, total: offsets.length });
       const offset = offsets[i];
       if (offset === undefined) {
         throw new Error(`internal error: missing tile offset at index ${i}`);
@@ -308,7 +314,7 @@ export async function captureFullPage(
       rgbaChunks.push(rgba);
     }
 
-    onProgress("Processing…");
+    onProgress({ text: "Processing…" });
     const concatenated = concatenateRgba(rgbaChunks);
 
     const dpr = metrics.devicePixelRatio;
@@ -354,7 +360,11 @@ async function runReliablePrescroll(tabId: number, onProgress: ProgressCallback,
     if (isCancelled()) {
       throw new CaptureCancelledError();
     }
-    onProgress(`Preparing… (pre-scroll ${pass + 1}/${DEFAULT_MAX_PRESCROLL_PASSES})`);
+    onProgress({
+      text: `Preparing… (pre-scroll ${pass + 1} of ${DEFAULT_MAX_PRESCROLL_PASSES})`,
+      current: pass + 1,
+      total: DEFAULT_MAX_PRESCROLL_PASSES,
+    });
 
     const [{ result: metrics }] = (await chrome.scripting.executeScript({
       target: { tabId },
@@ -399,7 +409,7 @@ export async function captureScrollArea(
   await ensureWasm();
   const tab = await getCapturableTab(tabId);
 
-  onProgress("Preparing…");
+  onProgress({ text: "Preparing…" });
   const [{ result: metrics }] = (await chrome.scripting.executeScript({
     target: { tabId },
     func: measureContainerBySelector,
@@ -433,7 +443,7 @@ export async function captureScrollArea(
       if (isCancelled()) {
         throw new CaptureCancelledError();
       }
-      onProgress(`Capturing ${i + 1}/${offsets.length}…`);
+      onProgress({ text: `Capturing ${i + 1} of ${offsets.length}…`, current: i + 1, total: offsets.length });
       const offset = offsets[i];
       if (offset === undefined) {
         throw new Error(`internal error: missing tile offset at index ${i}`);
@@ -472,7 +482,7 @@ export async function captureScrollArea(
       rgbaChunks.push(rgba);
     }
 
-    onProgress("Processing…");
+    onProgress({ text: "Processing…" });
     const concatenated = concatenateRgba(rgbaChunks);
     const dpr = rect.devicePixelRatio;
     const { bytes, mimeType } = encodeComposite(
