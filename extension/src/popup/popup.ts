@@ -7,6 +7,7 @@ import { rankAndDeduplicate, classifyScrollAreaUiState } from "../capture/scroll
 import { type CaptureMode, type ExportFormat, type InboundMessage, type MarkdownExportMode, type OutboundMessage, type PdfOrientation, type PdfPageSize } from "../background/messages.js";
 import { mapBrowserError, type FriendlyError } from "./errors.js";
 import { loadPreferences, savePreferences } from "./preferences.js";
+import { progressStateForMessage, type ProgressUiState } from "./progressView.js";
 
 const PROTECTED_PAGE: FriendlyError = {
   title: "Capture unavailable on this page",
@@ -264,12 +265,11 @@ async function sendCommand(message: InboundMessage): Promise<OutboundMessage | n
   }
 }
 
-function applyStateMessage(message: OutboundMessage & { type: "STATE" }): void {
-  if (message.active) {
-    setBusy(true);
-    if (message.progress) {
-      renderProgress(message.progress.text, message.progress.current, message.progress.total);
-    }
+/** Applies a progress/busy decision (from progressView.ts) to the actual DOM. */
+function applyProgressUiState(state: ProgressUiState): void {
+  setBusy(state.busy);
+  if (state.progressText !== null) {
+    renderProgress(state.progressText, state.progressCurrent, state.progressTotal);
   }
 }
 
@@ -277,30 +277,21 @@ chrome.runtime.onMessage.addListener((raw: unknown) => {
   const message = raw as OutboundMessage;
   switch (message.type) {
     case "STATE":
-      applyStateMessage(message);
-      return;
     case "PROGRESS":
-      setBusy(true);
-      renderProgress(message.text, message.current, message.total);
-      return;
     case "DONE":
-      renderProgress("Capture ready", undefined, undefined);
-      setBusy(false);
-      return;
     case "CANCELLED":
-      renderProgress("Cancelled — page restored", undefined, undefined);
-      setBusy(false);
+      applyProgressUiState(progressStateForMessage(message));
       return;
     case "NO_CONTAINER_SELECTED":
-      setBusy(false);
+      applyProgressUiState(progressStateForMessage(message));
       showError({ title: "No area selected", body: "Choose a scrollable region on the page, or use Full page / Visible area instead." }, "no scroll container selected");
       return;
     case "ALREADY_CAPTURING":
-      setBusy(true);
+      applyProgressUiState(progressStateForMessage(message));
       showError({ title: "Capture already running", body: "Wait for the current capture to finish, or cancel it, before starting another." }, "already capturing");
       return;
     case "ERROR":
-      setBusy(false);
+      applyProgressUiState(progressStateForMessage(message));
       showError(mapBrowserError(message.message), message.message);
       return;
     case "STARTED":
@@ -311,7 +302,7 @@ chrome.runtime.onMessage.addListener((raw: unknown) => {
 cancelBtn.addEventListener("click", () => {
   void sendCommand({ type: "CANCEL" }).then((response) => {
     if (response?.type === "STATE") {
-      applyStateMessage(response);
+      applyProgressUiState(progressStateForMessage(response));
     }
   });
 });
@@ -344,6 +335,12 @@ async function startCapture(mode: CaptureMode): Promise<void> {
     return;
   }
   if (response.type === "ALREADY_CAPTURING") {
+    // This popup's own optimistic "Preparing…" was for a request that
+    // got refused — replace it with the real in-progress capture's
+    // state right away instead of leaving stale text up until the next
+    // PROGRESS broadcast happens to arrive.
+    const freshState = await sendCommand({ type: "GET_STATE" });
+    applyProgressUiState(progressStateForMessage(freshState?.type === "STATE" ? freshState : response));
     showError({ title: "Capture already running", body: "Wait for the current capture to finish, or cancel it, before starting another." }, "already capturing");
     return;
   }
@@ -372,7 +369,7 @@ async function main(): Promise<void> {
   await applyStoredPreferences();
   const state = await sendCommand({ type: "GET_STATE" });
   if (state?.type === "STATE") {
-    applyStateMessage(state);
+    applyProgressUiState(progressStateForMessage(state));
   }
   await analyzeScrollAreas(tab.id);
   updatePrimaryCtaLabel();
