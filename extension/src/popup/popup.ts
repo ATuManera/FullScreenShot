@@ -4,7 +4,7 @@
 import { isCapturableUrl } from "../capture/geometry.js";
 import { detectScrollCandidates } from "../capture/scrollDetectionInjectable.js";
 import { rankAndDeduplicate, classifyScrollAreaUiState } from "../capture/scrollAnalysis.js";
-import { PORT_NAME, type CaptureMode, type ExportFormat, type MarkdownExportMode, type OutboundMessage, type PdfOrientation, type PdfPageSize } from "../background/messages.js";
+import { type CaptureMode, type ExportFormat, type InboundMessage, type MarkdownExportMode, type OutboundMessage, type PdfOrientation, type PdfPageSize } from "../background/messages.js";
 import { mapBrowserError, type FriendlyError } from "./errors.js";
 import { loadPreferences, savePreferences } from "./preferences.js";
 
@@ -235,21 +235,50 @@ markdownBack.addEventListener("click", () => {
   viewMain.hidden = false;
 });
 
-// --- Capture port (single, reused for the popup's lifetime) ---------------
-const port = chrome.runtime.connect({ name: PORT_NAME });
+// --- Transport --------------------------------------------------------
+// Discrete commands go through `chrome.runtime.sendMessage`, not a
+// long-lived `chrome.runtime.connect` port — see messages.ts's doc
+// comment for why: a port opened once here and reused for the popup's
+// whole lifetime would silently go stale whenever the background
+// service worker restarts in between (routine under MV3), and any
+// later `port.postMessage()` would throw "Attempting to use a
+// disconnected port object" (uncaught, since a plain postMessage call
+// has nothing to catch it). `sendMessage` has no such state: every
+// call is a fresh, self-contained round trip.
+//
+// PROGRESS/DONE/CANCELLED/ERROR/NO_CONTAINER_SELECTED arrive later,
+// asynchronously, pushed by the background via its own
+// `chrome.runtime.sendMessage` calls — heard here via a persistent
+// `onMessage` listener. If the popup is closed when one is sent, it's
+// simply never delivered (no error either side); the capture keeps
+// running in the background regardless, and a reopened popup catches
+// up via GET_STATE.
+async function sendCommand(message: InboundMessage): Promise<OutboundMessage | null> {
+  try {
+    const response = (await chrome.runtime.sendMessage(message)) as OutboundMessage | undefined;
+    return response ?? null;
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    console.error("[FullScreenShot] command failed to reach the background", message.type, raw);
+    return null;
+  }
+}
 
-port.onMessage.addListener((raw: unknown) => {
+function applyStateMessage(message: OutboundMessage & { type: "STATE" }): void {
+  if (message.active) {
+    setBusy(true);
+    if (message.progress) {
+      renderProgress(message.progress.text, message.progress.current, message.progress.total);
+    }
+  }
+}
+
+chrome.runtime.onMessage.addListener((raw: unknown) => {
   const message = raw as OutboundMessage;
   switch (message.type) {
-    case "STATE": {
-      if (message.active) {
-        setBusy(true);
-        if (message.progress) {
-          renderProgress(message.progress.text, message.progress.current, message.progress.total);
-        }
-      }
+    case "STATE":
+      applyStateMessage(message);
       return;
-    }
     case "PROGRESS":
       setBusy(true);
       renderProgress(message.text, message.current, message.total);
@@ -274,14 +303,20 @@ port.onMessage.addListener((raw: unknown) => {
       setBusy(false);
       showError(mapBrowserError(message.message), message.message);
       return;
+    case "STARTED":
+      return;
   }
 });
 
 cancelBtn.addEventListener("click", () => {
-  port.postMessage({ type: "CANCEL" });
+  void sendCommand({ type: "CANCEL" }).then((response) => {
+    if (response?.type === "STATE") {
+      applyStateMessage(response);
+    }
+  });
 });
 
-function startCapture(mode: CaptureMode): void {
+async function startCapture(mode: CaptureMode): Promise<void> {
   clearError();
   setBusy(true);
   renderProgress("Preparing…");
@@ -291,7 +326,7 @@ function startCapture(mode: CaptureMode): void {
   const pdfOrientation = (checkedValue(pdfOrientationRadios()) ?? "portrait") as PdfOrientation;
   const markdownMode = (checkedValue(markdownModeRadios()) ?? "article") as MarkdownExportMode;
 
-  port.postMessage({
+  const response = await sendCommand({
     type: "START_CAPTURE",
     mode,
     exportFormat,
@@ -299,13 +334,27 @@ function startCapture(mode: CaptureMode): void {
     pdfOrientation,
     markdownMode,
   });
+
+  if (response === null) {
+    // The command never reached the background — never surface the raw
+    // browser/runtime error text; show recovery copy only now, after the
+    // attempt has genuinely failed.
+    setBusy(false);
+    showError(mapBrowserError("disconnected port object"), "sendMessage(START_CAPTURE) failed");
+    return;
+  }
+  if (response.type === "ALREADY_CAPTURING") {
+    showError({ title: "Capture already running", body: "Wait for the current capture to finish, or cancel it, before starting another." }, "already capturing");
+    return;
+  }
+  // STARTED: busy state is already set; PROGRESS/DONE/ERROR arrive via the onMessage listener above.
 }
 
 primaryCta.addEventListener("click", () => {
   const mode = (checkedValue(captureModeRadios()) ?? "fullpage") as CaptureMode;
-  startCapture(mode);
+  void startCapture(mode);
 });
-markdownExportBtn.addEventListener("click", () => startCapture("markdown"));
+markdownExportBtn.addEventListener("click", () => void startCapture("markdown"));
 
 // --- Startup ---------------------------------------------------------------
 async function main(): Promise<void> {
@@ -315,14 +364,16 @@ async function main(): Promise<void> {
   if (!tab || !tab.id || !tab.url || !isCapturableUrl(tab.url)) {
     if (pageContextEl) pageContextEl.textContent = "Protected browser page";
     showRestricted(PROTECTED_PAGE);
-    port.postMessage({ type: "GET_STATE" });
     return;
   }
 
   if (pageContextEl) pageContextEl.textContent = hostname ?? "";
 
   await applyStoredPreferences();
-  port.postMessage({ type: "GET_STATE" });
+  const state = await sendCommand({ type: "GET_STATE" });
+  if (state?.type === "STATE") {
+    applyStateMessage(state);
+  }
   await analyzeScrollAreas(tab.id);
   updatePrimaryCtaLabel();
 }

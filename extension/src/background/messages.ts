@@ -2,14 +2,29 @@
 // Copyright (c) 2026 ATuManera / Fernando Gallarday
 
 /**
- * Message contract between popup.ts and background/index.ts, carried over
- * a single `chrome.runtime.connect({ name: PORT_NAME })` port so the
- * background can push multiple progress updates during one capture.
+ * Message contract between popup.ts and background/index.ts.
+ *
+ * Transport: `chrome.runtime.sendMessage` / `chrome.runtime.onMessage`,
+ * not a long-lived `chrome.runtime.connect` port. A port opened once at
+ * popup-load time and reused for the popup's whole lifetime silently
+ * goes stale whenever the (ephemeral, MV3) background service worker
+ * restarts in between — any later `port.postMessage()` then throws
+ * "Attempting to use a disconnected port object". `sendMessage` has no
+ * such staleness: every call is a fresh, self-contained request that
+ * wakes the service worker if needed. Commands (GET_STATE, CANCEL,
+ * START_CAPTURE) go through `sendMessage` and get a synchronous
+ * `sendResponse` reply; progress/result updates that happen later,
+ * asynchronously, during a capture (PROGRESS, DONE, CANCELLED, ERROR,
+ * NO_CONTAINER_SELECTED) are pushed by the background calling
+ * `chrome.runtime.sendMessage` itself, received by the popup's
+ * `chrome.runtime.onMessage` listener — which simply hears nothing if
+ * the popup is closed, matching "the popup is not the authoritative
+ * owner of an active capture; background/service-worker state is".
+ *
  * Every inbound message is validated by `parseInboundMessage` — never
  * trust a runtime message's shape, per the extension's threat model
  * (SECURITY.md: "extension message spoofing", "unexpected messages").
  */
-export const PORT_NAME = "fullscreenshot-capture";
 
 export type CaptureMode = "visible" | "fullpage" | "scrollarea" | "markdown";
 export type ExportFormat = "png" | "pdf";
@@ -70,6 +85,11 @@ export interface AlreadyCapturingMessage {
   type: "ALREADY_CAPTURING";
 }
 
+/** Synchronous reply to a START_CAPTURE that was accepted; the capture itself proceeds asynchronously. */
+export interface StartedMessage {
+  type: "STARTED";
+}
+
 /** Reply to GetStateMessage: whether a capture is active right now, and its last known progress. */
 export interface StateMessage {
   type: "STATE";
@@ -85,7 +105,8 @@ export type OutboundMessage =
   | ErrorMessage
   | NoContainerSelectedMessage
   | AlreadyCapturingMessage
-  | StateMessage;
+  | StateMessage
+  | StartedMessage;
 
 function isCaptureMode(value: unknown): value is CaptureMode {
   return value === "visible" || value === "fullpage" || value === "scrollarea" || value === "markdown";

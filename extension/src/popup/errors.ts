@@ -40,6 +40,18 @@ const GENERIC: FriendlyError = {
 };
 
 /**
+ * A `chrome.runtime.sendMessage` call itself failed to reach the
+ * background (service worker not yet woken, extension mid-reload, or —
+ * historically, before this pass moved off a long-lived Port — a stale
+ * `chrome.runtime.connect` port). Shown only after the caller has
+ * genuinely given up, never speculatively.
+ */
+const CONNECTION_LOST: FriendlyError = {
+  title: "Capture connection interrupted",
+  body: "The extension temporarily lost its connection. Please try again.",
+};
+
+/**
  * Patterns matched against the raw (technical) error message. Order
  * matters — the first match wins. Matching is deliberately loose
  * (case-insensitive substring) since browser error text isn't a stable
@@ -53,6 +65,7 @@ const PATTERNS: Array<{ test: RegExp; friendly: FriendlyError }> = [
   { test: /no longer on the page/i, friendly: NO_SCROLL_CONTAINER },
   { test: /infinite scroll/i, friendly: PAGE_CHANGED },
   { test: /tab was closed|no tab with id|frame was removed/i, friendly: CAPTURE_INTERRUPTED },
+  { test: /disconnected port object|receiving end does not exist|message port closed before a response|extension context invalidated/i, friendly: CONNECTION_LOST },
 ];
 
 /**

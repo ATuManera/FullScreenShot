@@ -5,11 +5,11 @@ import { browser } from "../browser/index.js";
 import { CaptureCancelledError, captureFullPage, captureScrollArea, captureVisible, exportMarkdown, PageNotCapturableError, type CaptureProgress } from "../capture/orchestrator.js";
 import { enterSelectionMode, type ContainerSelector } from "../capture/selection.js";
 import { selectSoleScrollCandidate } from "../capture/scrollDetectionInjectable.js";
-import { bytesToDataUrl } from "./bytes.js";
 import { clearBadge, setBadgeError, setBadgeIndeterminate, setBadgeProgress, setBadgeSuccess } from "./badge.js";
-import { parseInboundMessage, PORT_NAME, type CaptureMode, type OutboundMessage, type StartCaptureMessage } from "./messages.js";
+import { parseInboundMessage, type CaptureMode, type OutboundMessage, type StartCaptureMessage } from "./messages.js";
 import { buildStateMessage, shouldRefuseNewCapture, type ActiveCapture } from "./captureGuard.js";
 import { buildFilename } from "../popup/filename.js";
+import { saveResult } from "../shared/resultStore.js";
 
 const EXTENSION_FOR_MIME: Record<string, string> = {
   "image/png": "png",
@@ -51,6 +51,29 @@ interface ResolvedExport {
  * depend on one staying open. Only one capture may run at a time.
  */
 let active: ActiveCapture | null = null;
+
+/**
+ * Cancellation flag for whatever capture is currently active. A plain
+ * module-level flag (rather than a per-connection closure, as the
+ * earlier port-based design used) is sufficient and correct because
+ * `shouldRefuseNewCapture` already guarantees at most one capture runs
+ * at a time — there is never more than one cancellation to track.
+ */
+let cancelRequested = false;
+
+/**
+ * Pushes an update to whichever popup instance is currently open, if
+ * any. `chrome.runtime.sendMessage` has no persistent-connection state
+ * to go stale: if no popup is listening, the call simply has no
+ * receiver — this is the expected, harmless case (capture continues in
+ * the background regardless of whether the popup is open), not an
+ * error, so the rejection is swallowed rather than surfaced.
+ */
+function broadcast(message: OutboundMessage): void {
+  chrome.runtime.sendMessage(message).catch(() => {
+    // No popup open to receive it — expected, not a failure.
+  });
+}
 
 function reportProgress(mode: CaptureMode, progress: CaptureProgress, send: (message: OutboundMessage) => void): void {
   active = { mode, progress };
@@ -112,90 +135,85 @@ async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (mes
   });
 }
 
-async function runCapture(msg: StartCaptureMessage, port: chrome.runtime.Port, isCancelled: () => boolean): Promise<void> {
-  const send = (message: OutboundMessage): void => {
-    try {
-      port.postMessage(message);
-    } catch {
-      // Port closed (popup dismissed) — the capture keeps running so the
-      // result is still stored, just not reported live.
-    }
-  };
-
-  if (shouldRefuseNewCapture(active)) {
-    send({ type: "ALREADY_CAPTURING" });
-    return;
-  }
-
+async function runCapture(msg: StartCaptureMessage, isCancelled: () => boolean): Promise<void> {
   active = { mode: msg.mode, progress: { text: "Preparing…" } };
-  send({ type: "PROGRESS", text: "Preparing…" });
+  broadcast({ type: "PROGRESS", text: "Preparing…" });
   setBadgeIndeterminate();
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || tab.id === undefined) {
-      send({ type: "ERROR", message: "No active tab to capture." });
+      broadcast({ type: "ERROR", message: "No active tab to capture." });
       return;
     }
 
-    const result = await resolveResult(msg, tab.id, send, isCancelled);
+    const result = await resolveResult(msg, tab.id, broadcast, isCancelled);
     if (!result) {
       return;
     }
 
-    reportProgress(msg.mode, { text: "Preparing download…" }, send);
+    reportProgress(msg.mode, { text: "Preparing download…" }, broadcast);
     const resultId = randomResultId();
-    const dataUrl = bytesToDataUrl(result.bytes, result.mimeType);
     const filename = buildFilename({
       hostname: hostnameOf(tab.url),
       title: tab.title ?? "",
       date: new Date(),
       ext: extensionFor(result.mimeType),
     });
-    await chrome.storage.session.set({ [resultId]: { dataUrl, filename } });
+    await saveResult(resultId, new Blob([new Uint8Array(result.bytes)], { type: result.mimeType }), filename);
 
     await chrome.tabs.create({ url: chrome.runtime.getURL(`result/result.html?id=${encodeURIComponent(resultId)}`) });
 
     setBadgeSuccess();
-    send({ type: "DONE", resultId, width: result.width, height: result.height });
+    broadcast({ type: "DONE", resultId, width: result.width, height: result.height });
   } catch (e) {
     if (e instanceof CaptureCancelledError) {
       clearBadge();
-      send({ type: "CANCELLED" });
+      broadcast({ type: "CANCELLED" });
       return;
     }
     if (e instanceof PageNotCapturableError) {
       setBadgeError();
-      send({ type: "ERROR", message: e.message });
+      broadcast({ type: "ERROR", message: e.message });
       return;
     }
     setBadgeError();
-    send({ type: "ERROR", message: e instanceof Error ? e.message : String(e) });
+    broadcast({ type: "ERROR", message: e instanceof Error ? e.message : String(e) });
   } finally {
     active = null;
   }
 }
 
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== PORT_NAME) {
-    return;
+/**
+ * Discrete, stateless commands from the popup — see messages.ts's doc
+ * comment for why `sendMessage`/`onMessage` replaced a long-lived Port.
+ * Every branch calls `sendResponse` synchronously, so the listener
+ * always returns `false` (there is nothing pending to answer later).
+ */
+chrome.runtime.onMessage.addListener((raw: unknown, _sender, sendResponse: (response: OutboundMessage) => void) => {
+  const message = parseInboundMessage(raw);
+  if (!message) {
+    return false;
   }
 
-  let cancelled = false;
+  if (message.type === "GET_STATE") {
+    sendResponse(buildStateMessage(active));
+    return false;
+  }
 
-  port.onMessage.addListener((raw: unknown) => {
-    const message = parseInboundMessage(raw);
-    if (!message) {
-      return;
-    }
-    if (message.type === "CANCEL") {
-      cancelled = true;
-      return;
-    }
-    if (message.type === "GET_STATE") {
-      port.postMessage(buildStateMessage(active));
-      return;
-    }
-    void runCapture(message, port, () => cancelled);
-  });
+  if (message.type === "CANCEL") {
+    cancelRequested = true;
+    sendResponse(buildStateMessage(active));
+    return false;
+  }
+
+  // START_CAPTURE
+  if (shouldRefuseNewCapture(active)) {
+    sendResponse({ type: "ALREADY_CAPTURING" });
+    return false;
+  }
+  cancelRequested = false;
+  sendResponse({ type: "STARTED" });
+  void runCapture(message, () => cancelRequested);
+  return false;
 });
