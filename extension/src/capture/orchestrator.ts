@@ -9,7 +9,7 @@
  * for how the pure parts of this flow were verified instead.
  */
 import { isCapturableUrl, measurePage, type PageMetrics } from "./geometry.js";
-import { hideFixedAndStickyElements, restoreFixedAndStickyElements } from "./injectable.js";
+import { applyFixedElementVisibility, restoreFixedAndStickyElements, type FixedElementCensus, type FixedVisibilityMode } from "./injectable.js";
 import { classifyPrescrollOutcome, DEFAULT_MAX_PRESCROLL_PASSES } from "./lazy.js";
 import { extractMarkdownAst, type MarkdownMode } from "./markdown.js";
 import {
@@ -275,6 +275,12 @@ export async function captureVisible(tabId: number): Promise<CaptureResult> {
  * request, and a page is free to ignore, clamp or undo it. Recording requested
  * offsets as if they were achieved is what turned a page that refuses to
  * scroll into a tall PNG containing the same viewport over and over.
+ *
+ * Viewport-anchored elements are shown in the one band where they belong:
+ * top-anchored in the first retained band, bottom-anchored in the last, and
+ * nothing in between. Hiding them everywhere except the first tile — the
+ * previous rule — silently lost every bottom-anchored footer, because the
+ * bottom of the first tile is exactly the part stitching discards.
  */
 export async function captureFullPage(
   tabId: number,
@@ -316,6 +322,9 @@ export async function captureFullPage(
     const rgbaChunks: Uint8Array[] = [];
     const fingerprints: string[] = [];
     let previousActualY: number | null = null;
+    /** A capture that is one viewport *is* the viewport — everything in it belongs. */
+    const singleTileCapture = plannedOffsets.length === 1;
+    let bottomAnchoredSeen = 0;
 
     for (let i = 0; i < plannedOffsets.length; i++) {
       if (isCancelled()) {
@@ -350,12 +359,20 @@ export async function captureFullPage(
         continue;
       }
 
-      // Hiding is keyed off how many tiles were actually kept, not the plan
-      // index, so a skipped tile can't leave the first captured tile with its
-      // fixed/sticky elements hidden.
+      // Which band this is decides which anchored elements belong in it, and
+      // that is keyed off how many tiles were actually kept, not the plan
+      // index — a skipped tile must not cost the first captured tile its
+      // header. The bottom-anchored ones are handled after the loop, once the
+      // final retained band is known for certain rather than guessed at.
       const isFirstCapturedTile = capturedOffsets.length === 0;
-      if (!isFirstCapturedTile) {
-        await chrome.scripting.executeScript({ target: { tabId }, func: hideFixedAndStickyElements });
+      const mode: FixedVisibilityMode = singleTileCapture ? "show-all" : isFirstCapturedTile ? "show-top" : "hide-all";
+      const [{ result: census }] = (await chrome.scripting.executeScript({
+        target: { tabId },
+        func: applyFixedElementVisibility,
+        args: [mode],
+      })) as unknown as [{ result: FixedElementCensus }];
+      bottomAnchoredSeen = Math.max(bottomAnchoredSeen, census.bottom);
+      if (census.hidden > 0) {
         await chrome.scripting.executeScript({ target: { tabId }, func: settleFrame });
       }
 
@@ -373,9 +390,7 @@ export async function captureFullPage(
         throw e;
       }
 
-      if (!isFirstCapturedTile) {
-        await chrome.scripting.executeScript({ target: { tabId }, func: restoreFixedAndStickyElements });
-      }
+      await chrome.scripting.executeScript({ target: { tabId }, func: restoreFixedAndStickyElements });
 
       if (isCancelled()) {
         throw new CaptureCancelledError();
@@ -395,6 +410,16 @@ export async function captureFullPage(
     // capture whose every tile is byte-identical is not a capture.
     if (allCapturedTilesIdentical(fingerprints, capturedOffsets)) {
       throw new DidNotScrollError();
+    }
+
+    // The final retained band is the only place a bottom-anchored element can
+    // appear exactly once: every earlier band is truncated at the next tile's
+    // origin, and the last one is the only tile whose whole viewport is kept.
+    // Re-taking just that tile is what makes this certain — guessing which
+    // tile would turn out to be last, before the loop had finished skipping
+    // clamped ones, would put a footer in the middle of a growing page.
+    if (!singleTileCapture && bottomAnchoredSeen > 0) {
+      await recaptureFinalBandWithBottomElements(tabId, tab.windowId, rateLimiter, isCancelled, capturedOffsets, tileWidths, tileHeights, rgbaChunks);
     }
 
     onProgress({ text: "Processing…" });
@@ -430,6 +455,85 @@ export async function captureFullPage(
       args: [snapshot],
     });
   }
+}
+
+/**
+ * Re-takes the last tile with only bottom-anchored elements visible, and
+ * swaps it in.
+ *
+ * The main loop cannot do this itself: it does not know which tile is the
+ * last retained one until it has finished, because a requested offset that
+ * Chrome clamps onto an already-captured viewport is skipped, and a page that
+ * grows mid-capture can make an apparently-final tile not final after all.
+ * Taking one more screenshot at the position already established is cheaper
+ * than getting that guess wrong, and it costs nothing on the overwhelming
+ * majority of pages, which have no bottom-anchored bar at all.
+ *
+ * Everything here is best-effort by design: if the page will no longer scroll
+ * back to where the tile came from, or the re-taken screenshot does not match
+ * the tile it would replace pixel-for-pixel in size, the original tile is
+ * kept. A missing footer is a small loss; a mismatched tile would be rejected
+ * by the compositor and cost the whole capture.
+ */
+async function recaptureFinalBandWithBottomElements(
+  tabId: number,
+  windowId: number,
+  rateLimiter: RateLimiter,
+  isCancelled: () => boolean,
+  capturedOffsets: number[],
+  tileWidths: number[],
+  tileHeights: number[],
+  rgbaChunks: Uint8Array[],
+): Promise<void> {
+  const lastIndex = capturedOffsets.length - 1;
+  const lastOffset = capturedOffsets[lastIndex];
+  if (lastOffset === undefined) {
+    return;
+  }
+  if (isCancelled()) {
+    throw new CaptureCancelledError();
+  }
+
+  const [{ result: rescrolled }] = (await chrome.scripting.executeScript({
+    target: { tabId },
+    func: scrollWindowToVerified,
+    args: [lastOffset],
+  })) as unknown as [{ result: WindowScrollOutcome }];
+  if (Math.abs(rescrolled.actualY - lastOffset) > SCROLL_POSITION_TOLERANCE_PX) {
+    return;
+  }
+
+  // One captured tile means its band is the whole output, so it is the first
+  // band as much as the last and the header belongs in it too.
+  const mode: FixedVisibilityMode = capturedOffsets.length === 1 ? "show-all" : "show-bottom";
+  await chrome.scripting.executeScript({ target: { tabId }, func: applyFixedElementVisibility, args: [mode] });
+  await chrome.scripting.executeScript({ target: { tabId }, func: settleFrame });
+
+  const wait = rateLimiter.nextDelayMs(performance.now());
+  if (wait > 0) {
+    await sleep(wait);
+  }
+
+  let dataUrl: string;
+  try {
+    dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
+    rateLimiter.recordSuccess(performance.now());
+  } catch (e) {
+    rateLimiter.recordError(performance.now());
+    throw e;
+  } finally {
+    await chrome.scripting.executeScript({ target: { tabId }, func: restoreFixedAndStickyElements });
+  }
+
+  if (isCancelled()) {
+    throw new CaptureCancelledError();
+  }
+
+  const { width, height, rgba } = await decodePngDataUrlToRgba(dataUrl);
+  if (width !== tileWidths[lastIndex] || height !== tileHeights[lastIndex]) {
+    return;
+  }
+  rgbaChunks[lastIndex] = rgba;
 }
 
 /**

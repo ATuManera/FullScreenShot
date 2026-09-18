@@ -19,18 +19,24 @@ const CAPTURE_SENTINEL = "stub: capture reached captureVisibleTab";
 
 let onMessage;
 let injected;
+let injectedCalls;
 let captureCalls;
+let broadcasts;
+/** Successive `scrollHeight` readings, to model a page that grows while pre-scrolling. */
+let measureHeights;
 
 function makeChromeStub() {
   injected = [];
+  injectedCalls = [];
   captureCalls = 0;
+  broadcasts = [];
   return {
     runtime: {
       onMessage: {
         addListener: (fn) => { if (!onMessage) onMessage = fn; },
         removeListener: () => {},
       },
-      sendMessage: async () => undefined,
+      sendMessage: async (m) => { broadcasts.push(m); return undefined; },
       getManifest: () => ({ manifest_version: 3 }),
       getURL: (p) => `chrome-extension://stub/${p}`,
       getPlatformInfo: async () => ({ os: "mac" }),
@@ -46,11 +52,14 @@ function makeChromeStub() {
       executeScript: async ({ func, args = [] }) => {
         const name = func?.name ?? "anonymous";
         injected.push(name);
+        injectedCalls.push({ name, args });
         switch (name) {
           case "begin":
             return [{ result: { scrollX: 0, scrollY: 0, documentElementInlineOverflow: "", bodyInlineOverflow: "", documentElementInlineScrollBehavior: "" } }];
-          case "measurePage":
-            return [{ result: { scrollWidth: 1200, scrollHeight: 4000, viewportWidth: 1200, viewportHeight: 800, devicePixelRatio: 1, scrollX: 0, scrollY: 0 } }];
+          case "measurePage": {
+            const scrollHeight = measureHeights?.length ? measureHeights.shift() : 4000;
+            return [{ result: { scrollWidth: 1200, scrollHeight, viewportWidth: 1200, viewportHeight: 800, devicePixelRatio: 1, scrollX: 0, scrollY: 0 } }];
+          }
           case "scrollWindowToVerified":
             return [{ result: { requestedY: args[0], actualY: args[0], maxScrollY: 3200 } }];
           case "selectSoleScrollCandidate":
@@ -79,13 +88,30 @@ function start(mode) {
   });
 }
 
-/** Waits until the background has stopped issuing stubbed work for this capture. */
+const countOf = (name) => injected.filter((n) => n === name).length;
+
+/**
+ * Waits until the background has stopped issuing stubbed work for this
+ * capture. The quiet window has to outlast the real pauses in the pipeline —
+ * the Reliable pre-scroll's per-pass settle and the capture rate limiter —
+ * or a test would hand back while a capture is still running and its calls
+ * would land in the next test's recording.
+ */
 async function settle() {
-  for (let i = 0; i < 60; i++) {
+  const QUIET_MS = 700;
+  const POLL_MS = 50;
+  let quiet = 0;
+  for (let elapsed = 0; elapsed < 20_000; elapsed += POLL_MS) {
     const before = injected.length + captureCalls;
-    await new Promise((r) => setTimeout(r, 15));
-    if (injected.length + captureCalls === before) return;
+    await new Promise((r) => setTimeout(r, POLL_MS));
+    quiet = injected.length + captureCalls === before ? quiet + POLL_MS : 0;
+    if (quiet >= QUIET_MS) return;
   }
+}
+
+function resetStub() {
+  globalThis.chrome = makeChromeStub();
+  measureHeights = null;
 }
 
 before(async () => {
@@ -99,13 +125,13 @@ before(async () => {
     }
     return realFetch(input, init);
   };
-  globalThis.chrome = makeChromeStub();
+  resetStub();
   await import("../../dist/chromium/background/index.js");
   assert.ok(onMessage, "background did not register a runtime message listener");
 });
 
 test("Full Page scrolls the window and never runs scroll-area location", async () => {
-  globalThis.chrome = makeChromeStub();
+  resetStub();
   const ack = await start("fullpage");
   assert.deepEqual(ack, { type: "STARTED" });
   await settle();
@@ -118,7 +144,7 @@ test("Full Page scrolls the window and never runs scroll-area location", async (
 });
 
 test("Visible Area captures without touching the page's scroll position", async () => {
-  globalThis.chrome = makeChromeStub();
+  resetStub();
   await start("visible");
   await settle();
 
@@ -127,7 +153,7 @@ test("Visible Area captures without touching the page's scroll position", async 
 });
 
 test("Scroll Area locates a container and scrolls that, not the window", async () => {
-  globalThis.chrome = makeChromeStub();
+  resetStub();
   await start("scrollarea");
   await settle();
 
@@ -138,14 +164,14 @@ test("Scroll Area locates a container and scrolls that, not the window", async (
 });
 
 test("the capture guard is released after a failed capture, so the next one is accepted", async () => {
-  globalThis.chrome = makeChromeStub();
+  resetStub();
   const ack = await start("visible");
   assert.deepEqual(ack, { type: "STARTED" }, "a previous failure must not leave the guard held");
   await settle();
 });
 
 test("a single capture at a time is refused, not queued", async () => {
-  globalThis.chrome = makeChromeStub();
+  resetStub();
   const first = start("fullpage");
   const second = start("fullpage");
   assert.deepEqual(await first, { type: "STARTED" });
@@ -154,7 +180,7 @@ test("a single capture at a time is refused, not queued", async () => {
 });
 
 test("the page's scroll position is restored even when the capture fails", async () => {
-  globalThis.chrome = makeChromeStub();
+  resetStub();
   await start("fullpage");
   await settle();
   assert.ok(injected.includes("restore"), "expected the transactional page-state restore to run");
@@ -162,9 +188,28 @@ test("the page's scroll position is restored even when the capture fails", async
 });
 
 test("a failed scroll-area capture still releases the container it marked", async () => {
-  globalThis.chrome = makeChromeStub();
+  resetStub();
   await start("scrollarea");
   await settle();
   assert.ok(injected.includes("releaseContainer"), "expected the marker attribute and scrollTop to be released");
   assert.ok(injected.includes("restore"), "expected the page scroll to be restored");
 });
+
+// --- Fixed-element band policy -------------------------------------------
+
+test("each tile declares which anchored elements belong in its band", async () => {
+  resetStub();
+  await start("fullpage");
+  await settle();
+  const modes = injectedCalls.filter((c) => c.name === "applyFixedElementVisibility").map((c) => c.args[0]);
+  assert.equal(modes[0], "show-top", "the first retained band is where a header belongs");
+  assert.ok(modes.length >= 1);
+});
+
+test("hidden fixed elements are restored after every tile, not only later ones", async () => {
+  resetStub();
+  await start("fullpage");
+  await settle();
+  assert.ok(countOf("restoreFixedAndStickyElements") >= 1, "expected fixed/sticky restoration");
+});
+
