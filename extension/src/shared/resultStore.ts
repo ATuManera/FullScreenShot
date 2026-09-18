@@ -31,7 +31,21 @@ const CREATED_AT_INDEX = "createdAt";
 /** How long a result is kept before it's treated as expired and cleaned up. */
 export const RESULT_TTL_MS = 15 * 60 * 1000;
 
-export interface StoredResult {
+/**
+ * Small, optional presentation metadata for the Result Page — never a
+ * second copy of the screenshot bytes (those live only in `blob`).
+ * Every field is optional so a record saved before this metadata
+ * existed still loads correctly (`loadResult` just returns `undefined`
+ * for fields it never had).
+ */
+export interface ResultMetadata {
+  width?: number;
+  height?: number;
+  pdfPageSize?: "a4" | "letter" | "auto";
+  pdfOrientation?: "portrait" | "landscape";
+}
+
+export interface StoredResult extends ResultMetadata {
   blob: Blob;
   filename: string;
   createdAt: number;
@@ -62,12 +76,12 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 /** Stores a capture result. Also opportunistically clears expired entries so storage never grows unbounded. */
-export async function saveResult(id: string, blob: Blob, filename: string): Promise<void> {
+export async function saveResult(id: string, blob: Blob, filename: string, metadata: ResultMetadata = {}): Promise<void> {
   const db = await openDb();
   try {
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
-      const record: StoredRecord = { id, blob, filename, createdAt: Date.now() };
+      const record: StoredRecord = { id, blob, filename, createdAt: Date.now(), ...metadata };
       tx.objectStore(STORE_NAME).put(record);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error instanceof Error ? tx.error : new Error("Failed to save result."));
@@ -105,7 +119,15 @@ export async function loadResult(id: string): Promise<StoredResult | null> {
     void deleteResult(id);
     return null;
   }
-  return { blob: record.blob, filename: record.filename, createdAt: record.createdAt };
+  return {
+    blob: record.blob,
+    filename: record.filename,
+    createdAt: record.createdAt,
+    width: record.width,
+    height: record.height,
+    pdfPageSize: record.pdfPageSize,
+    pdfOrientation: record.pdfOrientation,
+  };
 }
 
 export async function deleteResult(id: string): Promise<void> {

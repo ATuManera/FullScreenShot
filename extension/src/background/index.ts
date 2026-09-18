@@ -9,7 +9,7 @@ import { clearBadge, setBadgeError, setBadgeIndeterminate, setBadgeProgress, set
 import { parseInboundMessage, type CaptureMode, type OutboundMessage, type StartCaptureMessage } from "./messages.js";
 import { buildStateMessage, shouldRefuseNewCapture, type ActiveCapture } from "./captureGuard.js";
 import { buildFilename } from "../popup/filename.js";
-import { saveResult } from "../shared/resultStore.js";
+import { saveResult, type ResultMetadata } from "../shared/resultStore.js";
 
 const EXTENSION_FOR_MIME: Record<string, string> = {
   "image/png": "png",
@@ -160,7 +160,21 @@ async function runCapture(msg: StartCaptureMessage, isCancelled: () => boolean):
       date: new Date(),
       ext: extensionFor(result.mimeType),
     });
-    await saveResult(resultId, new Blob([new Uint8Array(result.bytes)], { type: result.mimeType }), filename);
+    // width/height come from the capture pipeline's already-decoded raster
+    // (or the PDF's underlying page raster) — never re-decoded here just to
+    // display a number. Markdown reports 0/0 (no such thing as pixel
+    // dimensions for it), which is deliberately omitted from metadata
+    // rather than stored as a misleading "0 × 0".
+    const metadata: ResultMetadata = {};
+    if (result.width > 0 && result.height > 0) {
+      metadata.width = result.width;
+      metadata.height = result.height;
+    }
+    if (result.mimeType === "application/pdf") {
+      metadata.pdfPageSize = msg.pdfPageSize;
+      metadata.pdfOrientation = msg.pdfOrientation;
+    }
+    await saveResult(resultId, new Blob([new Uint8Array(result.bytes)], { type: result.mimeType }), filename, metadata);
 
     await chrome.tabs.create({ url: chrome.runtime.getURL(`result/result.html?id=${encodeURIComponent(resultId)}`) });
 

@@ -6,16 +6,44 @@
   <link rel="stylesheet" href="result.css" />
 </head>
 <body>
-  <main>
-    <h1>FullScreenShot</h1>
-    <p id="status" role="status">Loading…</p>
-    <div id="preview-wrap" hidden>
-      <img id="image-preview" alt="Captured page" hidden />
-      <iframe id="pdf-preview" title="Captured PDF" hidden></iframe>
-      <pre id="text-preview" hidden></pre>
+  <div class="page">
+    <div class="card">
+      <header class="result-header">
+        <img class="brand-icon" src="../icons/icon-32.png" width="22" height="22" alt="" />
+        <span class="brand-title">FullScreenShot</span>
+        <span class="status-pill" id="status-pill" role="status" aria-live="polite">Loading…</span>
+      </header>
+
+      <section class="result-summary" id="result-summary" hidden>
+        <p class="result-filename" id="result-filename"></p>
+        <p class="result-format muted" id="result-format"></p>
+        <p class="result-note muted" id="download-location-note"></p>
+        <p class="result-note muted" id="ttl-note"></p>
+
+        <div class="result-actions">
+          <a class="primary-cta" id="download-link" download>Download</a>
+          <button type="button" class="secondary-btn" id="close-btn" hidden>Close</button>
+        </div>
+        <p class="muted small close-fallback-text" id="close-fallback" hidden></p>
+      </section>
+
+      <section class="result-expired" id="result-expired" hidden>
+        <p class="expired-title" id="expired-title"></p>
+        <p class="expired-body muted" id="expired-body"></p>
+        <button type="button" class="secondary-btn" id="expired-close-btn" hidden>Close</button>
+        <p class="muted small close-fallback-text" id="expired-close-fallback" hidden></p>
+      </section>
     </div>
-    <a id="download-link" hidden>Download</a>
-  </main>
+
+    <section class="preview-panel" id="preview-panel" hidden aria-labelledby="preview-label">
+      <h2 class="preview-label" id="preview-label">Preview</h2>
+      <div class="preview-frame" id="preview-wrap">
+        <img id="image-preview" alt="Full captured page" hidden />
+        <iframe id="pdf-preview" title="Captured PDF" hidden></iframe>
+        <pre id="text-preview" hidden></pre>
+      </div>
+    </section>
+  </div>
   <script type="module" src="result.js"></script>
 </body>
 </html>
