@@ -69,3 +69,29 @@ test("never leaks raw technical vocabulary into the body for any mapped case", (
     assert.doesNotMatch(friendly.body, /stack|executeScript|ReferenceError|disconnected port/i);
   }
 });
+
+test("maps a page that refused to scroll to copy that names Visible area as the way out", () => {
+  const friendly = mapBrowserError("The page did not scroll as expected. Try again or use Visible area.");
+  assert.equal(friendly.title, "The page didn't scroll");
+  assert.match(friendly.body, /Visible area/);
+});
+
+test("maps a scroll area that can't be brought on screen to recovery copy, not the generic failure", () => {
+  const friendly = mapBrowserError("The selected scroll area could not be brought into view. Scroll it into the window and try again.");
+  assert.equal(friendly.title, "Scroll area can't be captured");
+  assert.notEqual(friendly.title, "Capture failed");
+});
+
+test("maps a scroll area that shifted mid-capture to the same recovery copy", () => {
+  const friendly = mapBrowserError("The selected scroll area moved while it was being captured. Try again.");
+  assert.equal(friendly.title, "Scroll area can't be captured");
+});
+
+test("maps the raw compositor dimension error it used to surface to safe copy", () => {
+  // Before the scroll-area repair a container taller than the viewport
+  // produced mismatched tile heights, and "invalid dimensions: 640x64"
+  // reached the user verbatim.
+  const friendly = mapBrowserError("invalid dimensions: 640x64");
+  assert.doesNotMatch(friendly.title, /dimensions|\d+x\d+/i);
+  assert.doesNotMatch(friendly.body, /dimensions|\d+x\d+/i);
+});
