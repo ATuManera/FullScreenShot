@@ -312,6 +312,45 @@ arreglo: `.progress-row`, `.mode-card` y `.row-action` fijan `display` y solo
 pierden frente al `[hidden]` del navegador porque Chrome lo marca
 `!important`, cosa que la especificación HTML no exige.
 
+## Popup navigation and picker handoff (`ux/popup-navigation-picker-focus`)
+
+**El popup es la aplicación; la pestaña es para el resultado.** Settings abría
+una página entera en una pestaña del navegador, y About compartía esa página.
+Para dos radios, un número de versión y una línea de atribución, eso es una
+pestaña que encontrar, leer y luego cerrar — más pesada que lo que muestra.
+Ahora son vistas de la misma ventana, junto al panel de Markdown que ya
+funcionaba así.
+
+`popupView.ts` guarda la navegación como un modelo puro y sin DOM (igual que
+`progressView.ts`): cuatro vistas, toda subvista vuelve a Main y solo a Main,
+y un popup abre siempre en Main en vez de retomar donde se dejó. Las entradas
+del pie pasaron de `<a href>` a `<button>`, que es lo que realmente impide que
+se cree una pestaña.
+
+Settings lee y escribe **la misma** preferencia `lazyMode` en el mismo
+registro de `chrome.storage.local` que usaba la página de opciones —sin un
+segundo sistema de ajustes— y guarda al elegir, así que Done solo significa
+"vuélveme atrás". El valor se retiene además en el estado del popup, para que
+una captura iniciada justo después use lo recién elegido y no lo que se cargó
+al abrir. About toma la versión del manifest en tiempo de ejecución, y la
+licencia y la atribución de lo que ya declara el repositorio.
+
+La página de opciones se **elimina** en vez de dejarse muerta: era una segunda
+interfaz sobre la misma preferencia, accesible desde el menú de la propia
+extensión, y mantenerla habría significado dos cosas que conservar
+sincronizadas. `options_page` sale del manifest y el build deja de copiar los
+archivos. Nada más los referenciaba.
+
+**El popup se aparta cuando el picker está armado.** Cancelar el picker
+multi-región requería dos Escapes: mientras el popup está abierto retiene el
+teclado, así que el primero solo cerraba el popup y nunca llegaba a la página.
+El background anuncia `PICKER_ARMED` **después** de que la inyección haya
+tenido éxito y encontrado candidatos; la respuesta a `START_CAPTURE` nombra la
+sesión iniciada, y el popup se cierra solo ante un anuncio de *su propia*
+captura. Un picker que no llega a instalarse nunca produce ese mensaje, de
+modo que un fallo no puede dejar a alguien con el popup cerrado, sin picker y
+sin explicación.
+
 ## What this pass deliberately did not touch
 
 - The Rust capture core (`crates/`) — untouched except for the
@@ -335,3 +374,4 @@ pierden frente al `[hidden]` del navegador porque Chrome lo marca
 | 2026-09-18 | `47cfb16` | Final Chrome UX polish, parte 3: se extrae la decisión de progreso/Cancel del popup a `popup/progressView.ts` (función pura) y se corrige un texto "Preparing…" obsoleto en el caso `ALREADY_CAPTURING`. |
 | 2026-09-18 | `1300c53` | Final Chrome UX polish, parte 4: cobertura de tests para `resultView.ts` y `progressView.ts` (90/90 tests pasando). |
 | 2026-09-18 | `e68b747` | Estado terminal de captura: identidad de sesión en los mensajes de ciclo de vida, guarda contra `PROGRESS`/`STATE` obsoletos, liberación del guard antes del mensaje terminal, limpieza del readout de progreso y copia amable para capturas genuinamente demasiado grandes. |
+| 2026-09-18 | `e1cc3e0`, `9010a9a` | Traspaso del picker (`PICKER_ARMED` → el popup se cierra, un solo Escape cancela) y consolidación de Settings/About como vistas internas del popup, con eliminación de la página de opciones. |

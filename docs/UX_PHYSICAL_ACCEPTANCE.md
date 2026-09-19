@@ -254,25 +254,28 @@ Open `http://127.0.0.1:8899/scrollarea-multiple.html`.
 
 - [ ] D1. The popup shows "Choose scroll area…" and "2 scrollable regions
       detected"; the primary button reads "Choose scroll area".
-- [ ] D2. Pressing it outlines both panels in blue and the cursor becomes a
-      pointer over them. (The click that dismisses the popup is swallowed by
-      Chrome and does not reach the page — the outlines stay up for the next
-      click.)
+- [ ] D2. Pressing it outlines both panels in blue, the cursor becomes a
+      pointer over them, and **the popup closes itself** — the choice happens
+      on the page, so the page gets the keyboard.
+- [ ] D2b. The popup must not close before the outlines appear. On a page
+      whose regions vanish just beforehand, the popup stays open and says so
+      rather than closing onto nothing.
 - [ ] D3. Hovering a panel thickens its outline.
 - [ ] D4. Clicking the right-hand (green-bordered) panel captures it. The
       result contains BETA ROW 1 … BETA ROW 12 and no ALPHA rows.
 - [ ] D5. No blue selector outline appears anywhere in the captured image.
 - [ ] D6. Repeat and click the left-hand panel: the result contains ALPHA
       rows only.
-- [ ] D7. Repeat and press Escape instead: outlines disappear, no capture
-      starts, and the popup returns to a ready state **immediately** — with
-      no red error notice. Escape is a choice, not a failure.
+- [ ] D7. Repeat and press Escape **once**: outlines disappear and no capture
+      starts. One press, not two — the popup is already out of the way, so the
+      key reaches the picker.
 - [ ] D8. Repeat and click empty page background instead: same as D7 — this
       must not hang.
-- [ ] D9. Repeat, press Escape, then reopen FullScreenShot **straight away**.
-      It must already be ready: no "Choose a scroll area…", no progress bar,
-      no Cancel, and no delay before it settles. This is the exact symptom
-      this pass was opened for.
+- [ ] D9. Repeat, press Escape once, then reopen FullScreenShot **straight
+      away**. It must be ready, with no red error notice — Escape is a choice,
+      not a failure.
+      No "Choose a scroll area…", no progress bar, no Cancel, and no delay
+      before it settles.
 - [ ] D10. Repeat, press Escape, and start a different capture (Visible area)
       immediately. It must be accepted, not refused as "Capture already
       running".
@@ -340,6 +343,27 @@ fractional device pixel ratio) as well as the default.
       bar at the same time.
 - [ ] G7. After an error, starting a new capture works and shows fresh
       progress.
+
+### Gate H — Settings and About live in the popup
+
+- [ ] H1. Open FullScreenShot and click **Settings** in the footer. It opens
+      inside the popup. **No browser tab is created.**
+- [ ] H2. The Full-page loading choice is there, showing the value currently
+      in force, with its hint underneath.
+- [ ] H3. Switch it to Reliable. The hint updates immediately.
+- [ ] H4. Press **Done** (or **‹ Back**) — both return to the capture view.
+- [ ] H5. Close and reopen the popup: it opens on the capture view, and
+      Settings still shows Reliable. The choice persisted.
+- [ ] H6. Start a Full page capture right after changing the setting, without
+      reopening the popup: it uses the setting you just picked.
+- [ ] H7. Click **About**. It opens inside the popup. **No browser tab.**
+      It shows the icon, the real version (0.1.0), the local-only guarantees,
+      the licence and the attribution.
+- [ ] H8. **‹ Back** returns to the capture view.
+- [ ] H9. Check both views in light and dark mode, and reach every control
+      with Tab alone — focus must stay visible throughout.
+- [ ] H10. There is no longer an "Extension options" entry in the extension's
+      own menu on `chrome://extensions` — Settings lives only in the popup.
 
 ### Gate E — nothing already working regressed
 

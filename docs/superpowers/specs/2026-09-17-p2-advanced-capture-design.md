@@ -47,6 +47,17 @@ dependencias (P5).
   vive en TypeScript (es una política de UX/timing, no geometría pura) pero
   la *detección* de "altura sigue creciendo" es una comparación numérica
   simple, testeable sin DOM.
+- **Revisado — el popup cede el foco cuando el picker está armado.** Mientras
+  el popup está abierto retiene el teclado, así que un Escape destinado al
+  picker solo lo cerraba a él: cancelar exigía dos pulsaciones. El background
+  emite `PICKER_ARMED` una vez que `executeScript(runSelectionPicker)` ha
+  resuelto **con candidatos**, la respuesta a `START_CAPTURE` incluye el
+  `sessionId` iniciado, y el popup ejecuta `window.close()` solo ante un
+  anuncio de su propia sesión. Ni un fallo de inyección ni una página sin
+  candidatos generan el mensaje, de modo que el popup nunca se cierra sobre
+  la nada; y un anuncio de una captura anterior no puede cerrar un popup que
+  ya se está usando para otra cosa. Sin permisos nuevos y sin reenvío
+  sintético de teclado: basta con quitarse de en medio.
 - **Revisado — cancelar no es fallar, y entregar no es asumir.** El desenlace
   del picker se colapsaba a `selector | null` en `resolveResult`, de modo que
   "el usuario decidió no elegir" y "no había nada que elegir" emitían ambos
@@ -171,3 +182,4 @@ discrepar.
 | 2026-09-18 | `02ad6b7`, `273172d` | Reparación de runtime de Selected Scroll Area: ciclo de vida de selección serializable y terminal (mensaje + desenlace único + limpieza del lado de la página), contenedor traído a la vista con banda visible real, y restauración completa de `scrollTop`, marcador y scroll de página. Verificado en Chromium real con `tests/pages/scrollarea-single.html` y `tests/pages/scrollarea-multiple.html`. |
 | 2026-09-18 | `98780c2` | Reliable mode cableado de extremo a extremo (`lazyMode` en el contrato `START_CAPTURE`, validado y propagado hasta `captureFullPage`) y reparación de la condición de parada del pre-scroll. Verificado en Chromium con `tests/pages/lazy-fullpage-acceptance.html`: Fast 1200x2100 con 3 secciones, Reliable 1200x4200 con 6. |
 | 2026-09-18 | `e121f5e`, `60862db` | Desenlaces terminales de la selección: Escape se reporta como cancelación y no como error, `no-candidates` se separa de `cancelled`, el desenlace se entrega con acuse y reintento acotado, y el estado autoritativo refleja la espera. Medido en Chromium: Escape → idle en 7 ms. |
+| 2026-09-18 | `e1cc3e0` | Traspaso explícito del picker: `PICKER_ARMED` por sesión, el popup se cierra solo cuando hay picker que recibir al usuario, y una sola pulsación de Escape cancela. Medido en Chromium: popup cerrado ~100 ms tras armar; Escape → idle en 255 ms. |
