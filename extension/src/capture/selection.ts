@@ -134,20 +134,44 @@ export function runSelectionPicker(attr: string, requestId: string, watchdogMs: 
   });
 
   let settled = false;
+  /**
+   * Reports the outcome and confirms it arrived.
+   *
+   * Fire-and-forget was not enough. A terminal outcome that fails to land —
+   * no receiver at that instant, the worker mid-restart, the extension
+   * context torn down — left the page tidy and the extension still waiting,
+   * with nothing to end the selection but its watchdog. That turns a
+   * deterministic "cancel" into "cancel in ninety seconds". The background
+   * answers with `{ received: true }`, and anything else is retried a few
+   * times over well under a second before giving up.
+   */
   const report = (payload: Record<string, unknown>): void => {
     if (settled) return;
     settled = true;
-    try {
-      chrome.runtime.sendMessage({ type: MESSAGE_TYPE, requestId, ...payload });
-    } catch {
-      // Nothing is listening any more (worker evicted, extension reloaded).
-      // The page has already been restored by `cleanup`, which is the part
-      // that must not depend on anyone receiving this.
-    }
+    const message = { type: MESSAGE_TYPE, requestId, ...payload };
+    const retryDelayMs = 150;
+    const attempt = (remaining: number): void => {
+      const again = (): void => {
+        if (remaining > 0) setTimeout(() => attempt(remaining - 1), retryDelayMs);
+      };
+      let pending: unknown;
+      try {
+        pending = chrome.runtime.sendMessage(message);
+      } catch {
+        again();
+        return;
+      }
+      void Promise.resolve(pending).then((response) => {
+        const acknowledged = typeof response === "object" && response !== null && (response as { received?: unknown }).received === true;
+        if (!acknowledged) again();
+      }, again);
+    };
+    attempt(4);
   };
 
   if (candidates.length === 0) {
-    report({ status: "cancelled" });
+    // Nothing to pick is not the same as choosing not to pick.
+    report({ status: "no-candidates" });
     return 0;
   }
 

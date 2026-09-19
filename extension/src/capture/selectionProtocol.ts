@@ -13,9 +13,13 @@
  *
  * Selection now crosses the boundary as an ordinary, structured-cloneable
  * runtime message tagged with the request it answers, so the background can
- * match it, ignore anything else, and always settle on exactly one of
- * selected / cancelled / error. Pure and untrusted-input-safe: like
- * `parseInboundMessage`, this never assumes a message's shape.
+ * match it, ignore anything else, and always settle on exactly one outcome.
+ * Pure and untrusted-input-safe: like `parseInboundMessage`, this never
+ * assumes a message's shape.
+ *
+ * The outcomes are kept apart on purpose. Backing out with Escape is a
+ * decision, not a failure, and must not be reported to the user the way "this
+ * page has no scrollable region" is.
  */
 import type { ContainerSelector } from "./selection.js";
 
@@ -23,8 +27,16 @@ export const SELECTION_MESSAGE_TYPE = "SCROLL_AREA_SELECTION";
 
 export type SelectionOutcome =
   | { status: "selected"; selector: ContainerSelector }
+  /** The user deliberately backed out — Escape, or a click away from every candidate. */
   | { status: "cancelled" }
+  /** There was nothing to pick: the page changed between analysis and the picker running. */
+  | { status: "no-candidates" }
   | { status: "error"; message: string };
+
+/** What the page sends back to acknowledge that a terminal outcome was delivered. */
+export interface SelectionAck {
+  received: true;
+}
 
 /**
  * Validates a runtime message and returns the outcome it carries, or `null`
@@ -41,6 +53,9 @@ export function parseSelectionMessage(raw: unknown, expectedRequestId: string): 
   }
   if (candidate.status === "cancelled") {
     return { status: "cancelled" };
+  }
+  if (candidate.status === "no-candidates") {
+    return { status: "no-candidates" };
   }
   if (candidate.status === "error") {
     return { status: "error", message: typeof candidate.message === "string" ? candidate.message : "Scroll-area selection failed." };

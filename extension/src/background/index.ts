@@ -4,7 +4,7 @@
 import { browser } from "../browser/index.js";
 import { CaptureCancelledError, captureFullPage, captureScrollArea, captureVisible, exportMarkdown, PageNotCapturableError, type CaptureProgress } from "../capture/orchestrator.js";
 import { abortSelectionPicker, runSelectionPicker, CONTAINER_SELECTOR_ATTR, type ContainerSelector } from "../capture/selection.js";
-import { parseSelectionMessage, type SelectionOutcome } from "../capture/selectionProtocol.js";
+import { parseSelectionMessage, type SelectionAck, type SelectionOutcome } from "../capture/selectionProtocol.js";
 import { selectSoleScrollCandidate } from "../capture/scrollDetectionInjectable.js";
 import { clearBadge, setBadgeError, setBadgeIndeterminate, setBadgeProgress, setBadgeSuccess } from "./badge.js";
 import { parseInboundMessage, type CaptureMode, type OutboundMessage, type StartCaptureMessage } from "./messages.js";
@@ -141,11 +141,19 @@ async function pickScrollArea(tabId: number): Promise<SelectionOutcome> {
       resolve(value);
     };
 
-    function onSelectionMessage(raw: unknown): void {
+    function onSelectionMessage(raw: unknown, _sender: chrome.runtime.MessageSender, sendResponse: (response: SelectionAck) => void): void {
       const parsed = parseSelectionMessage(raw, requestId);
-      if (parsed) {
-        settle(parsed);
+      if (!parsed) {
+        // Not this selection's answer — a stale picker from an earlier
+        // session, or an unrelated message. Left unacknowledged on purpose,
+        // so a picker that is talking to nobody stops rather than retrying.
+        return;
       }
+      // Acknowledged before settling: the page needs to know its outcome
+      // landed, or it will keep retrying and eventually give up believing
+      // the extension is gone.
+      sendResponse({ received: true });
+      settle(parsed);
     }
     function onTabRemoved(closedTabId: number): void {
       if (closedTabId === tabId) {
@@ -170,10 +178,11 @@ async function pickScrollArea(tabId: number): Promise<SelectionOutcome> {
       })
       .then(([injected]) => {
         // No candidates left by the time the picker ran: the page changed
-        // between the popup's analysis and now. Report it rather than
-        // leaving the user staring at a page with nothing to click.
+        // between the popup's analysis and now. Reported as its own outcome,
+        // because "there is nothing here to pick" is a different thing to
+        // tell someone than "you chose not to pick".
         if (injected?.result === 0) {
-          settle({ status: "cancelled" });
+          settle({ status: "no-candidates" });
         }
       })
       .catch((e: unknown) => settle({ status: "error", message: e instanceof Error ? e.message : String(e) }));
@@ -190,22 +199,36 @@ async function pickScrollArea(tabId: number): Promise<SelectionOutcome> {
   return outcome;
 }
 
-async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (message: OutboundMessage) => void, isCancelled: () => boolean): Promise<ResolvedExport | null> {
+/**
+ * How a capture ended. Cancelling is not failing: backing out of the
+ * scroll-area picker with Escape has to reach the popup as a cancellation,
+ * not as "No area selected", which is what the page says when there was
+ * nothing to pick in the first place.
+ */
+type CaptureOutcome =
+  | { kind: "export"; result: ResolvedExport }
+  | { kind: "cancelled" }
+  | { kind: "no-container" };
+
+async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (message: OutboundMessage) => void, isCancelled: () => boolean): Promise<CaptureOutcome> {
   const onProgress = (progress: CaptureProgress): void => reportProgress(msg.mode, progress, send);
 
   if (msg.mode === "visible") {
-    return captureVisible(tabId);
+    return { kind: "export", result: await captureVisible(tabId) };
   }
   if (msg.mode === "fullpage") {
-    return captureFullPage(tabId, onProgress, isCancelled, msg.lazyMode, msg.exportFormat, {
-      pageSize: msg.pdfPageSize,
-      orientation: msg.pdfOrientation,
-    });
+    return {
+      kind: "export",
+      result: await captureFullPage(tabId, onProgress, isCancelled, msg.lazyMode, msg.exportFormat, {
+        pageSize: msg.pdfPageSize,
+        orientation: msg.pdfOrientation,
+      }),
+    };
   }
   if (msg.mode === "markdown") {
     onProgress({ text: "Reading page…" });
     const result = await exportMarkdown(tabId, msg.markdownMode);
-    return { ...result, width: 0, height: 0 };
+    return { kind: "export", result: { ...result, width: 0, height: 0 } };
   }
 
   // "scrollarea": the popup already determined (via UX-P2's contextual
@@ -221,23 +244,30 @@ async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (mes
 
   let selector = soleSelector;
   if (!selector) {
-    send({ type: "PROGRESS", text: "Choose a scroll area on the page (Esc to cancel)…" });
+    // Through `onProgress`, not a bare broadcast: the authoritative state has
+    // to say the extension is waiting for a choice, or a popup reopened
+    // mid-selection reconstructs the wrong thing from GET_STATE.
+    onProgress({ text: "Choose a scroll area on the page (Esc to cancel)…" });
     const outcome = await pickScrollArea(tabId);
     if (outcome.status === "error") {
       throw new Error(outcome.message);
     }
-    selector = outcome.status === "selected" ? outcome.selector : null;
+    if (outcome.status === "cancelled") {
+      return { kind: "cancelled" };
+    }
+    if (outcome.status === "no-candidates") {
+      return { kind: "no-container" };
+    }
+    selector = outcome.selector;
   }
 
-  if (!selector) {
-    send({ type: "NO_CONTAINER_SELECTED" });
-    return null;
-  }
-
-  return captureScrollArea(tabId, selector, onProgress, isCancelled, msg.exportFormat, {
-    pageSize: msg.pdfPageSize,
-    orientation: msg.pdfOrientation,
-  });
+  return {
+    kind: "export",
+    result: await captureScrollArea(tabId, selector, onProgress, isCancelled, msg.exportFormat, {
+      pageSize: msg.pdfPageSize,
+      orientation: msg.pdfOrientation,
+    }),
+  };
 }
 
 async function runCapture(msg: StartCaptureMessage, isCancelled: () => boolean): Promise<void> {
@@ -253,10 +283,16 @@ async function runCapture(msg: StartCaptureMessage, isCancelled: () => boolean):
       return;
     }
 
-    const result = await resolveResult(msg, tab.id, broadcast, isCancelled);
-    if (!result) {
+    const outcome = await resolveResult(msg, tab.id, broadcast, isCancelled);
+    if (outcome.kind !== "export") {
+      // Released before the terminal message goes out, so a popup that
+      // reopens on hearing it can never be told a capture is still running.
+      active = null;
+      clearBadge();
+      broadcast(outcome.kind === "cancelled" ? { type: "CANCELLED" } : { type: "NO_CONTAINER_SELECTED" });
       return;
     }
+    const result = outcome.result;
 
     reportProgress(msg.mode, { text: "Preparing download…" }, broadcast);
     const resultId = randomResultId();
