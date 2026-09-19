@@ -279,6 +279,39 @@ independent of this state machine (verified, not changed) — it never
 calls into progress UI, so "Locating scroll area…" was already scoped
 to the Scroll Area mode only.
 
+## Terminal capture state (`fix/fullpage-output-dimensions`)
+
+**Un estado terminal no puede convivir con UI de actividad.** Una captura
+fallida mostraba "Capture failed" con barra de progreso, "Processing…" y
+Cancel debajo. La rama `ERROR` sí limpia el estado ocupado y sí se ejecutó
+—la traza reportada cae en el `showError` inmediatamente posterior—, así que
+algo lo restauraba después.
+
+Dos tipos de mensaje pueden afirmar "sigo trabajando" sobre una captura ya
+terminada. Una respuesta a `GET_STATE` es una instantánea del momento en que
+se respondió, así que una pedida justo antes del fallo sigue diciendo
+"Processing…" cuando llega — que es exactamente lo que solicita un popup
+reabierto cerca del final de una captura, y se aplica directamente a la UI en
+el arranque. Y `chrome.runtime.sendMessage` no garantiza orden entre llamadas
+distintas, de modo que un PROGRESS puede adelantar al ERROR que cerró su
+captura. Cualquiera de los dos devuelve la barra y Cancel bajo el aviso de
+error.
+
+El orden de llegada no es fiable; la identidad de la captura sí. El background
+etiqueta cada mensaje de ciclo de vida con un `sessionId`, y el popup ignora
+`PROGRESS` y `STATE` activo de una sesión que ya vio terminar
+(`describesAFinishedCapture`, puro y testeado). Los mensajes terminales nunca
+se suprimen, un `STATE` inactivo tampoco, y las actualizaciones de la
+*siguiente* captura sí se aplican, de modo que la guarda no puede dejar la UI
+bloqueada. Además el guard de captura se libera **antes** de emitir el mensaje
+terminal, no en el `finally` posterior, para que un `GET_STATE` respondido a
+raíz de un error no pueda afirmar que la captura sigue viva.
+
+La regla `[hidden]` añadida a `popup.css` es seguro de portabilidad, no el
+arreglo: `.progress-row`, `.mode-card` y `.row-action` fijan `display` y solo
+pierden frente al `[hidden]` del navegador porque Chrome lo marca
+`!important`, cosa que la especificación HTML no exige.
+
 ## What this pass deliberately did not touch
 
 - The Rust capture core (`crates/`) — untouched except for the
@@ -301,3 +334,4 @@ to the Scroll Area mode only.
 | 2026-09-18 | `7a4091d` | Final Chrome UX polish, parte 2: rediseño de la Result Page (estados Ready/Downloaded/Expired/Missing, resumen de formato/dimensiones, notas honestas sobre ubicación de descarga y TTL, botón Close con degradación) y extensión retrocompatible de `ResultMetadata` en `resultStore.ts`. |
 | 2026-09-18 | `47cfb16` | Final Chrome UX polish, parte 3: se extrae la decisión de progreso/Cancel del popup a `popup/progressView.ts` (función pura) y se corrige un texto "Preparing…" obsoleto en el caso `ALREADY_CAPTURING`. |
 | 2026-09-18 | `1300c53` | Final Chrome UX polish, parte 4: cobertura de tests para `resultView.ts` y `progressView.ts` (90/90 tests pasando). |
+| 2026-09-18 | `e68b747` | Estado terminal de captura: identidad de sesión en los mensajes de ciclo de vida, guarda contra `PROGRESS`/`STATE` obsoletos, liberación del guard antes del mensaje terminal, limpieza del readout de progreso y copia amable para capturas genuinamente demasiado grandes. |

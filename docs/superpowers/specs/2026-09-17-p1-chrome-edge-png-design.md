@@ -95,12 +95,41 @@ conserva todo, porque la salida *es* el viewport.
 
 Reutiliza `CapturePlan`/`Tile` de P0: cada tile tiene un `scroll_offset.y`.
 El compositor asigna a cada tile una banda de filas de salida
-`[offset_i, offset_{i+1})` (el último tile cubre hasta `content_height`), sin
-solapamiento en la imagen final — el overlap del plan de P0 es solo margen
-de tolerancia para que capturas con timing/redondeo ligeramente distintos
-igual cubran el contenido completo, no una zona de blending. Esto evita
-costuras visibles sin necesitar comparación de píxeles entre tiles
-adyacentes.
+`[offset_i, offset_{i+1})`, sin solapamiento en la imagen final — el overlap
+del plan de P0 es solo margen de tolerancia para que capturas con
+timing/redondeo ligeramente distintos igual cubran el contenido completo, no
+una zona de blending. Esto evita costuras visibles sin necesitar comparación
+de píxeles entre tiles adyacentes.
+
+**Revisado — la banda final la define el screenshot, no la aritmética CSS.**
+El diseño original hacía que el último tile cubriera "hasta `content_height`"
+y derivaba la altura de salida de `round(content_height * dpr)`. Eso mezcla
+dos autoridades distintas: la altura declarada venía de geometría CSS, y las
+filas venían de screenshots que el navegador rasteriza con su propio
+redondeo. Con DPR entero ambas coinciden siempre. Con DPR fraccionario —el
+del dueño es 1.5— discrepan en algunas posiciones de scroll: con un viewport
+de 657px a DPR 1.25 el navegador devuelve 821 filas donde
+`round((offset + viewport) * dpr) - round(offset * dpr)` pide 822. El último
+tile no podía aportar la fila exigida, el clamp `.min(image.height)` escribía
+una menos en silencio, y el chequeo de contabilidad de filas fallaba
+reportando el número de filas *escritas* — que llegaba al usuario como
+`invalid dimensions: 1660x8484` y parecía un límite de tamaño inexistente.
+
+Ahora la banda final **es** el último screenshot, y la altura de salida es la
+suma de las bandas que cada tile aporta realmente (`planned_band_rows`).
+`expected_output_height`, que el escritor PNG pone en la cabecera antes de
+transmitir una sola fila, se calcula desde la misma función, de modo que la
+altura declarada y la escrita no pueden divergir. Las alturas de tile pueden
+diferir entre sí por el redondeo del navegador; los anchos no.
+
+**Política de dimensiones.** No existía ninguna (ni `MAX_WIDTH`, ni 8192, ni
+`u16`). Se añade un presupuesto de píxeles —no un tope por eje, porque una
+imagen larga es el propósito del producto— de `MAX_COMPOSITE_PIXELS = 100_000_000`
+(~400MB de RGBA, ~1GB de working set, siete veces la captura que falló), con
+toda la aritmética de bytes en `u64` comprobado: este crate compila a wasm32,
+donde `usize` es de 32 bits y `width * height * 4` se desbordaría en silencio.
+Superarlo produce `CoreError::TooLarge`, distinto de `InvalidDimensions`, para
+que una página honestamente enorme no se confunda con una malformada.
 
 ## Estrategia de scroll (revisada — reparación de runtime)
 
@@ -225,3 +254,4 @@ del entorno de este agente — ver nota en el gate):
 | 2026-09-17 | `1deba96`, `0e97ac8`, `ba539eb`, `9919879` | Implementación completa de P1: rate limiter, compositor streaming, PNG streaming real, bridge WASM ampliado (composeFullPagePng, RateLimiter), capa capture/ del navegador (geometry/sticky/state/injectable/orchestrator), mensajería background↔popup, página de resultado sin permiso `downloads`. Verificado con Playwright contra fixtures reales. |
 | 2026-09-18 | `5ca678d`, `273172d`                          | Reparación de runtime de Full Page: verificación de la posición de scroll alcanzada antes de componer, descarte de tiles clampeados, aborto ante página que no scrollea, y salvaguarda de tiles idénticos. Reproducido y verificado en Chromium real con `tests/pages/scroll-jacked-page.html` y `tests/pages/fullpage-acceptance.html`. |
 | 2026-09-18 | `ede00b7`                                   | Política de elementos fijos por anclaje: TOP en la primera banda retenida, BOTTOM en la última (mediante recaptura de esa banda), OTHER sin cambios. Cierra la pérdida del footer fixed. Verificado en Chromium con `fullpage-acceptance.html` y `fixed-elements.html` a DPR 1 y 2. |
+| 2026-09-18 | `e03daae`, `a53bfb3`                        | Reparación del fallo físico de dimensiones: la banda final se toma del screenshot real en vez de derivarse de geometría CSS, altura declarada y escrita unificadas, política de presupuesto de píxeles con aritmética comprobada y error `TooLarge` propio, y dimensiones reportadas leídas de la cabecera PNG. Verificado en Chromium a DPR 1, 1.25, 1.5, 1.75 y 2. |
