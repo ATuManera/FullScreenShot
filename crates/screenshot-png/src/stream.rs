@@ -60,7 +60,7 @@ pub fn compose_full_page_png(
     dpr: f64,
     tiles: &[TileImage<'_>],
 ) -> Result<Vec<u8>, CoreError> {
-    let height = expected_output_height(plan, dpr)?;
+    let height = expected_output_height(plan, dpr, tiles)?;
     let width = tiles
         .first()
         .map(|t| t.meta.width)

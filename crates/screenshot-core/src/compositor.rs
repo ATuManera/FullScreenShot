@@ -4,7 +4,7 @@
 use crate::capture_plan::CapturePlan;
 use crate::error::CoreError;
 use crate::tile::TileId;
-use crate::validation::validate_plan;
+use crate::validation::{rgba_byte_len, validate_output_dimensions, validate_plan};
 
 /// Sink for streaming, row-by-row image output. Implemented by the PNG
 /// writer so full-page composition never needs to hold the entire
@@ -36,19 +36,13 @@ pub struct CompositeDimensions {
     pub height: u32,
 }
 
-/// Streams a full-page composite from `tiles` (in the same order as
-/// `plan.tiles`) into `sink`, one output row at a time. Each tile
-/// contributes the non-overlapping content band
-/// `[scroll_offset_i, scroll_offset_{i+1})` (last tile: up to
-/// `content_size.height`) from its own top edge — the overlap in
-/// `plan` is rounding tolerance, not a blend region, so no two tiles
-/// ever write the same output row.
-pub fn compose_streaming(
+/// Validates that `tiles` can be composed against `plan` at `dpr`, and
+/// reports the output width every tile agrees on.
+fn validate_inputs(
     plan: &CapturePlan,
     dpr: f64,
     tiles: &[TileImage<'_>],
-    sink: &mut dyn RowSink,
-) -> Result<CompositeDimensions, CoreError> {
+) -> Result<u32, CoreError> {
     validate_plan(plan)?;
     if !dpr.is_finite() || dpr <= 0.0 {
         return Err(CoreError::InvalidDimensions {
@@ -70,8 +64,11 @@ pub fn compose_streaming(
                 planned.id, image.meta.tile_id
             )));
         }
-        let expected_len = image.meta.width as usize * image.meta.height as usize * 4;
-        if image.meta.width == 0 || image.meta.height == 0 || image.rgba.len() != expected_len {
+        // Checked in u64: on wasm32 `usize` is 32 bits, so a hostile tile
+        // could otherwise wrap this product and satisfy the length test
+        // against a buffer far too small for the image it claims to be.
+        let expected_len = rgba_byte_len(image.meta.width, image.meta.height)?;
+        if image.rgba.len() != expected_len {
             return Err(CoreError::InvalidDimensions {
                 width: image.meta.width,
                 height: image.meta.height,
@@ -96,28 +93,87 @@ pub fn compose_streaming(
             });
         }
     }
+    Ok(output_width)
+}
 
-    let output_height_target = (plan.content_size.height * dpr).round() as u32;
+/// How many device rows each tile contributes to the output, in order.
+///
+/// Every band but the last is the gap to the next tile's origin, in device
+/// pixels. The last band is the last screenshot itself, and that is the
+/// repair: the height of a viewport in device pixels is whatever the browser
+/// rasterised, not `round(css_height * dpr)`. On a fractionally-scaled
+/// display the two disagree by a row for some scroll positions — the browser
+/// returns 821 rows where the arithmetic asks for 822 — and the old code,
+/// which derived the output height from CSS geometry alone, then demanded a
+/// row the final tile did not contain. The shortfall surfaced as a
+/// row-accounting failure reported as "invalid dimensions", on captures whose
+/// dimensions were perfectly ordinary.
+///
+/// Tile heights are therefore allowed to differ from each other by the
+/// browser's rounding. Widths are not: they set the output width.
+fn planned_band_rows(
+    plan: &CapturePlan,
+    dpr: f64,
+    tiles: &[TileImage<'_>],
+) -> Result<Vec<u32>, CoreError> {
+    let last = plan.tiles.len() - 1;
+    let mut rows = Vec::with_capacity(plan.tiles.len());
+    for (i, planned) in plan.tiles.iter().enumerate() {
+        let image_rows = tiles[i].meta.height;
+        if i == last {
+            rows.push(image_rows);
+            continue;
+        }
+        let start = (planned.scroll_offset.y * dpr).round();
+        let end = (plan.tiles[i + 1].scroll_offset.y * dpr).round();
+        let needed = (end - start).max(0.0) as u32;
+        // A band wider than its own screenshot would leave a gap in the
+        // page. It cannot happen for a plan whose stride is smaller than the
+        // viewport, which is every plan this crate produces, so it is a real
+        // inconsistency rather than rounding — and it is reported as one,
+        // not as a dimension problem.
+        if needed > image_rows {
+            return Err(CoreError::Overflow(format!(
+                "tile {i} must supply {needed} device rows but its screenshot is only {image_rows} tall"
+            )));
+        }
+        rows.push(needed);
+    }
+    Ok(rows)
+}
+
+fn total_rows(rows: &[u32]) -> Result<u32, CoreError> {
+    rows.iter().try_fold(0u32, |acc, r| {
+        acc.checked_add(*r).ok_or_else(|| {
+            CoreError::Overflow("composite height overflows a 32-bit row count".to_string())
+        })
+    })
+}
+
+/// Streams a full-page composite from `tiles` (in the same order as
+/// `plan.tiles`) into `sink`, one output row at a time. Each tile
+/// contributes the non-overlapping content band
+/// `[scroll_offset_i, scroll_offset_{i+1})` from its own top edge — the
+/// overlap in `plan` is rounding tolerance, not a blend region, so no two
+/// tiles ever write the same output row. The last tile contributes its whole
+/// screenshot; see `planned_band_rows` for why that, and not CSS arithmetic,
+/// defines where the image ends.
+pub fn compose_streaming(
+    plan: &CapturePlan,
+    dpr: f64,
+    tiles: &[TileImage<'_>],
+    sink: &mut dyn RowSink,
+) -> Result<CompositeDimensions, CoreError> {
+    let output_width = validate_inputs(plan, dpr, tiles)?;
+    let band_rows = planned_band_rows(plan, dpr, tiles)?;
+    let output_height = total_rows(&band_rows)?;
+    validate_output_dimensions(output_width, output_height)?;
+
     let row_len = output_width as usize * 4;
     let mut rows_written: u32 = 0;
 
-    for (i, (planned, image)) in plan.tiles.iter().zip(tiles.iter()).enumerate() {
-        let band_start_css = planned.scroll_offset.y;
-        let band_end_css = plan
-            .tiles
-            .get(i + 1)
-            .map(|next| next.scroll_offset.y)
-            .unwrap_or(plan.content_size.height);
-
-        let band_start_row = (band_start_css * dpr).round() as u32;
-        let band_end_row = ((band_end_css * dpr).round() as u32).min(output_height_target);
-        if band_end_row <= band_start_row {
-            continue;
-        }
-        let local_rows_needed = band_end_row - band_start_row;
-        let rows_to_write = local_rows_needed.min(image.meta.height);
-
-        for local_row in 0..rows_to_write {
+    for (image, rows_to_write) in tiles.iter().zip(band_rows.iter()) {
+        for local_row in 0..*rows_to_write {
             let start = local_row as usize * row_len;
             let end = start + row_len;
             sink.write_row(&image.rgba[start..end])?;
@@ -125,11 +181,13 @@ pub fn compose_streaming(
         }
     }
 
-    if rows_written != output_height_target {
-        return Err(CoreError::InvalidDimensions {
-            width: output_width,
-            height: rows_written,
-        });
+    // Now a pure internal-consistency assertion — the plan and the writing
+    // loop read from the same `band_rows` — rather than a comparison between
+    // CSS arithmetic and real pixels, which is what used to fail here.
+    if rows_written != output_height {
+        return Err(CoreError::Overflow(format!(
+            "composite wrote {rows_written} rows but its plan called for {output_height}"
+        )));
     }
 
     Ok(CompositeDimensions {
@@ -138,19 +196,19 @@ pub fn compose_streaming(
     })
 }
 
-/// The exact output height a composite will have for `plan` at `dpr`,
-/// computable before any tile data is available — lets callers (e.g. a
-/// PNG writer) allocate/declare output dimensions up front for a true
-/// single-pass streaming encode.
-pub fn expected_output_height(plan: &CapturePlan, dpr: f64) -> Result<u32, CoreError> {
-    validate_plan(plan)?;
-    if !dpr.is_finite() || dpr <= 0.0 {
-        return Err(CoreError::InvalidDimensions {
-            width: 0,
-            height: 0,
-        });
-    }
-    Ok((plan.content_size.height * dpr).round() as u32)
+/// The exact output height a composite will have, computable before any row
+/// is streamed — this is what a PNG writer declares in its header, so it must
+/// agree with `compose_streaming` exactly or the file is corrupt. Both derive
+/// it from the same `planned_band_rows`, which is why they cannot drift.
+pub fn expected_output_height(
+    plan: &CapturePlan,
+    dpr: f64,
+    tiles: &[TileImage<'_>],
+) -> Result<u32, CoreError> {
+    let output_width = validate_inputs(plan, dpr, tiles)?;
+    let height = total_rows(&planned_band_rows(plan, dpr, tiles)?)?;
+    validate_output_dimensions(output_width, height)?;
+    Ok(height)
 }
 
 #[cfg(test)]
@@ -187,6 +245,86 @@ mod tests {
             },
             rgba,
         )
+    }
+
+    /// The physical failure this module was repaired for.
+    ///
+    /// On a fractionally-scaled display the browser's own CSS-to-device
+    /// rounding and this module's `round(css * dpr)` arithmetic can disagree
+    /// by one row for the final band: the screenshot the browser handed back
+    /// is one row shorter than the height the composite was told to expect.
+    /// The last tile then cannot supply the row the target demands, and the
+    /// row-accounting check fired — reporting the number of rows *written*,
+    /// which read like "invalid dimensions: 1660x8484" and looked for all the
+    /// world like a size limit on long captures.
+    #[test]
+    fn final_band_uses_the_screenshot_the_browser_actually_returned() {
+        let viewport = Size {
+            width: 4.0,
+            height: 657.0,
+        };
+        // dpr 1.25 puts the viewport at 821.25 device rows: the browser
+        // rasterises 821, while `round((offset + viewport) * dpr)` asks for
+        // 822 at this particular offset.
+        let dpr = 1.25;
+        let plan = plan_with_offsets(&[0.0, 100.2], viewport);
+        let (meta0, rgba0) = solid_tile(0, 4, 821, [1, 2, 3, 255]);
+        let (meta1, rgba1) = solid_tile(1, 4, 821, [4, 5, 6, 255]);
+        let tiles = [
+            TileImage {
+                meta: meta0,
+                rgba: &rgba0,
+            },
+            TileImage {
+                meta: meta1,
+                rgba: &rgba1,
+            },
+        ];
+        let mut sink = CollectingSink { rows: Vec::new() };
+        let dims = compose_streaming(&plan, dpr, &tiles, &mut sink)
+            .expect("a long capture on a fractionally-scaled display must compose");
+        assert_eq!(dims.height, sink.rows.len() as u32);
+        // The output ends exactly where the last screenshot ends, rather than
+        // where CSS arithmetic predicted it would.
+        assert_eq!(dims.height, (100.2 * dpr).round() as u32 + 821);
+    }
+
+    #[test]
+    fn expected_output_height_agrees_with_what_is_written_at_fractional_dpr() {
+        let viewport = Size {
+            width: 4.0,
+            height: 657.0,
+        };
+        let dpr = 1.25;
+        let plan = plan_with_offsets(&[0.0, 100.2], viewport);
+        let (meta0, rgba0) = solid_tile(0, 4, 821, [1, 2, 3, 255]);
+        let (meta1, rgba1) = solid_tile(1, 4, 821, [4, 5, 6, 255]);
+        let tiles = [
+            TileImage {
+                meta: meta0,
+                rgba: &rgba0,
+            },
+            TileImage {
+                meta: meta1,
+                rgba: &rgba1,
+            },
+        ];
+        // The PNG header is written from this before a single row is
+        // streamed, so a disagreement here is a corrupt file, not an error.
+        let declared = expected_output_height(&plan, dpr, &tiles).unwrap();
+        let mut sink = CollectingSink { rows: Vec::new() };
+        let dims = compose_streaming(&plan, dpr, &tiles, &mut sink).unwrap();
+        assert_eq!(declared, dims.height);
+    }
+
+    #[test]
+    fn a_long_full_page_capture_is_a_supported_size() {
+        // 1660x8484 is the capture that was rejected in the field. Only the
+        // dimension policy is exercised here — allocating 56MB of RGBA to
+        // prove a bounds check would be a waste of a unit test.
+        assert!(crate::validation::validate_output_dimensions(1660, 8484).is_ok());
+        assert!(crate::validation::validate_output_dimensions(1660, 20_000).is_ok());
+        assert!(crate::validation::validate_output_dimensions(3840, 26_000).is_ok());
     }
 
     #[test]
@@ -467,8 +605,23 @@ mod tests {
             height: 4.0,
         };
         let plan = plan_with_offsets(&[0.0, 3.0, 6.0], viewport);
-        assert_eq!(expected_output_height(&plan, 1.0).unwrap(), 10);
-        assert_eq!(expected_output_height(&plan, 2.0).unwrap(), 20);
+        for (dpr, tile_height, expected) in [(1.0, 4u32, 10u32), (2.0, 8u32, 20u32)] {
+            let built: Vec<(TileImageMeta, Vec<u8>)> = (0..3)
+                .map(|i| solid_tile(i, 2, tile_height, [9, 9, 9, 255]))
+                .collect();
+            let tiles: Vec<TileImage<'_>> = built
+                .iter()
+                .map(|(meta, rgba)| TileImage { meta: *meta, rgba })
+                .collect();
+            assert_eq!(
+                expected_output_height(&plan, dpr, &tiles).unwrap(),
+                expected
+            );
+
+            let mut sink = CollectingSink { rows: Vec::new() };
+            let dims = compose_streaming(&plan, dpr, &tiles, &mut sink).unwrap();
+            assert_eq!(dims.height, expected);
+        }
     }
 
     #[test]

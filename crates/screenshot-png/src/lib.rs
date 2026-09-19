@@ -8,10 +8,10 @@ mod stream;
 pub use stream::{compose_full_page_png, encode_streaming};
 
 pub fn encode_rgba(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, CoreError> {
-    if width == 0 || height == 0 {
-        return Err(CoreError::InvalidDimensions { width, height });
-    }
-    let expected_len = (width as usize) * (height as usize) * 4;
+    // Shares the crate-wide dimension policy (zero, overflow and budget), so
+    // a long capture is accepted here on the same terms as in the compositor
+    // and a hostile one is refused on the same terms too.
+    let expected_len = screenshot_core::validation::rgba_byte_len(width, height)?;
     if rgba.len() != expected_len {
         return Err(CoreError::InvalidDimensions { width, height });
     }
@@ -54,5 +54,21 @@ mod tests {
     #[test]
     fn rejects_zero_dimensions() {
         assert!(encode_rgba(0, 10, &[]).is_err());
+    }
+
+    #[test]
+    fn encodes_a_very_tall_image_without_narrowing_its_height() {
+        // The PNG writer takes u32 width/height; this proves a height far
+        // past any 16-bit boundary survives into the header intact. Kept
+        // narrow so the test costs 320KB rather than hundreds of megabytes.
+        let width = 4u32;
+        let height = 20_000u32;
+        let rgba = vec![7u8; (width * height * 4) as usize];
+        let png_bytes = encode_rgba(width, height, &rgba).unwrap();
+        // IHDR width/height are big-endian u32 at bytes 16..24.
+        let declared_width = u32::from_be_bytes(png_bytes[16..20].try_into().unwrap());
+        let declared_height = u32::from_be_bytes(png_bytes[20..24].try_into().unwrap());
+        assert_eq!(declared_width, width);
+        assert_eq!(declared_height, height);
     }
 }
