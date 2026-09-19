@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Aceptación del PDF con texto buscable</title>
+<!--
+  Deterministic fixture for the hybrid PDF's text layer.
+
+  Nothing here loads from the network, animates, or changes between runs:
+  every colour is literal, every font is a generic family, and the filler
+  paragraphs are fixed prose. A capture of this page must therefore produce
+  the same text layer every time, which is what makes it usable as an
+  acceptance target rather than merely a demo.
+-->
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.6;
+    color: #16181d;
+    background: #ffffff;
+  }
+  header.sticky-bar {
+    position: sticky;
+    top: 0;
+    width: 100%;
+    background: #1d3557;
+    color: #ffffff;
+    padding: 14px 32px;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  footer.fixed-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: #457b9d;
+    color: #ffffff;
+    padding: 12px 32px;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 15px;
+  }
+  main { padding: 32px 32px 96px; max-width: 760px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 24px 0 8px; }
+  h2 { font-size: 24px; line-height: 1.25; margin: 40px 0 8px; }
+  p { margin: 0 0 18px; }
+  .narrow { max-width: 330px; }
+  a { color: #1d3557; }
+  code { font-family: "Courier New", monospace; font-size: 15px; background: #eef1f6; padding: 1px 4px; }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .not-displayed { display: none; }
+  .not-visible { visibility: hidden; }
+  .transparent { opacity: 0; }
+  .spacer { height: 900px; }
+</style>
+</head>
+<body>
+
+<header class="sticky-bar" id="sticky-header">Cabecera fija — Informe de auditoría</header>
+
+<main>
+  <h1 id="top-heading">Información de auditoría del Perú</h1>
+
+  <p id="top-paragraph">
+    Este párrafo abre el documento y contiene la palabra
+    <strong>información</strong> en negrita, la palabra <em>auditoría</em> en
+    cursiva y el término técnico <code>señal</code>. Sirve para comprobar que
+    el texto de la parte superior se encuentra, se selecciona y se copia.
+  </p>
+
+  <p>
+    Enlace cerca del principio:
+    <a id="link-top" href="https://example.com/principio">documento de origen</a>.
+    También hay una referencia relativa que el navegador resuelve:
+    <a id="link-relative" href="/informes/2026">informes de 2026</a>.
+  </p>
+
+  <p>
+    Enlaces que no deben convertirse en anotaciones:
+    <a id="link-js" href="javascript:void(0)">acción de página</a>,
+    <a id="link-data" href="data:text/html,x">recurso incrustado</a> y
+    <a id="link-mailto" href="mailto:nadie@example.com">correo</a>.
+  </p>
+
+  <h2>Texto que se parte en varias líneas</h2>
+
+  <p class="narrow" id="wrapped-paragraph">
+    Este párrafo es deliberadamente estrecho para que el navegador lo reparta
+    en varias líneas visuales, de modo que la capa de texto tenga que dividir
+    un único nodo en tantos renglones como se vean en la pantalla, sin que la
+    selección se desplace ni se amontone.
+  </p>
+
+  <p class="narrow">
+    Un enlace largo que también se parte:
+    <a id="link-wrapped" href="https://example.com/una/ruta/bastante/larga/para/partirse">
+      referencia extensa que ocupa más de una línea completa
+    </a>.
+  </p>
+
+  <h2>Acentos, eñes y diéresis</h2>
+
+  <p id="accent-paragraph">
+    información · auditoría · Perú · señal · ñandú · Ñuñoa · pingüino ·
+    Über · «comillas angulares» · signos ¿de? ¡interrogación!
+  </p>
+
+  <p class="sr-only">Texto solo para lectores de pantalla que no debe aparecer.</p>
+  <p class="not-displayed">Texto con display none que no debe aparecer.</p>
+  <p class="not-visible">Texto con visibility hidden que no debe aparecer.</p>
+  <p class="transparent">Texto con opacidad cero que no debe aparecer.</p>
+  <p hidden>Texto con el atributo hidden que no debe aparecer.</p>
+
+  <h2>Contenido intermedio</h2>
+
+  <p id="middle-paragraph">
+    Marcador intermedio: la verificación busca esta frase para comprobar que
+    el texto del centro del documento también es localizable en el PDF.
+  </p>
+
+  <div class="spacer" aria-hidden="true"></div>
+
+  <h2>Contenido inferior</h2>
+
+  <p id="bottom-paragraph">
+    Marcador inferior: esta frase cierra el documento y debe poder buscarse en
+    la última página del PDF, igual que la de arriba y la del centro.
+  </p>
+
+  <p>
+    Enlace cerca del final:
+    <a id="link-bottom" href="https://example.com/final">referencia final</a>.
+  </p>
+
+  <p id="last-line">Última línea del documento de aceptación.</p>
+</main>
+
+<footer class="fixed-bar" id="fixed-footer">Pie fijo — página 1 de 1 · FullScreenShot</footer>
+
+</body>
+</html>

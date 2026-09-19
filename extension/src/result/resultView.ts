@@ -15,6 +15,7 @@ export interface ResultDisplayMeta {
   height?: number;
   pdfPageSize?: "a4" | "letter" | "auto";
   pdfOrientation?: "portrait" | "landscape";
+  textLayer?: boolean;
 }
 
 export const READY_STATUS = "Capture complete";
@@ -96,9 +97,19 @@ function capitalize(value: string): string {
 }
 
 /**
+ * What a PDF's text layer is called when it exists.
+ *
+ * Only shown when the composer reported placing text. A PDF of a page made
+ * entirely of images has no text layer, and saying "Searchable text" over it
+ * would be the one claim on this page that the file cannot back up.
+ */
+export const SEARCHABLE_TEXT_NOTE = "Searchable text";
+
+/**
  * The one-line format summary under the filename, e.g.
- * "PNG · 1664 × 944", "PDF · A4 · Portrait", "Markdown". Never fakes
- * metadata that isn't available — falls back to just the format name.
+ * "PNG · 1664 × 944", "PDF · A4 · Portrait · Searchable text", "Markdown".
+ * Never fakes metadata that isn't available — falls back to just the format
+ * name.
  */
 export function formatFormatSummary(mimeType: string, meta: ResultDisplayMeta): string {
   if (mimeType === "image/png") {
@@ -107,7 +118,8 @@ export function formatFormatSummary(mimeType: string, meta: ResultDisplayMeta): 
   if (mimeType === "application/pdf") {
     const pageName = formatPdfPageSizeName(meta.pdfPageSize);
     const orientation = meta.pdfOrientation ? capitalize(meta.pdfOrientation) : null;
-    const parts = [pageName, orientation].filter((part): part is string => part !== null);
+    const searchable = meta.textLayer === true ? SEARCHABLE_TEXT_NOTE : null;
+    const parts = [pageName, orientation, searchable].filter((part): part is string => part !== null);
     return parts.length > 0 ? `PDF · ${parts.join(" · ")}` : "PDF";
   }
   if (mimeType === "text/markdown") {

@@ -43,6 +43,12 @@ export interface ResultMetadata {
   height?: number;
   pdfPageSize?: "a4" | "letter" | "auto";
   pdfOrientation?: "portrait" | "landscape";
+  /**
+   * Whether this PDF's text layer was really written. Recorded rather than
+   * inferred from the format, so the Result Page can only say a PDF is
+   * searchable when the composer reported placing text in it.
+   */
+  textLayer?: boolean;
 }
 
 export interface StoredResult extends ResultMetadata {
@@ -127,6 +133,7 @@ export async function loadResult(id: string): Promise<StoredResult | null> {
     height: record.height,
     pdfPageSize: record.pdfPageSize,
     pdfOrientation: record.pdfOrientation,
+    textLayer: record.textLayer,
   };
 }
 

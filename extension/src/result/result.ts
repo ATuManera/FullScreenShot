@@ -150,6 +150,7 @@ async function main(): Promise<void> {
       height: stored.height,
       pdfPageSize: stored.pdfPageSize,
       pdfOrientation: stored.pdfOrientation,
+      textLayer: stored.textLayer,
     });
   }
   if (downloadLocationNote) downloadLocationNote.textContent = DOWNLOAD_LOCATION_NOTE;

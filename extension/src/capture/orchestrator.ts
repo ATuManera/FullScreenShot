@@ -31,6 +31,7 @@ import {
   type WindowScrollOutcome,
 } from "./scrollSync.js";
 import { begin, restore, suppressSmoothScroll, type PageStateSnapshot } from "./state.js";
+import { extractTextLayer, type ExtractedTextLayer, type TextLayerMode } from "./textLayer.js";
 import initWasm, { composeFullPagePdf, composeFullPagePng, markdownFromJson, planTiles, RateLimiter } from "../wasm/screenshot_wasm.js";
 
 const DEFAULT_TILE_OVERLAP_CSS_PX = 40;
@@ -120,6 +121,51 @@ export interface CaptureResult {
   mimeType: string;
   width: number;
   height: number;
+  /**
+   * Whether this PDF really carries searchable text. Never assumed: it is
+   * what the composer reported placing, so the result page can say "PDF"
+   * rather than "Searchable PDF" when the text layer came back empty.
+   * Undefined for anything that is not a PDF.
+   */
+  textLayer?: boolean;
+}
+
+/**
+ * Reads the page's text and link geometry for a PDF export.
+ *
+ * Best-effort by design. A page that defeats extraction — an exotic
+ * `getClientRects` shim, a frame that detached mid-read — should still get
+ * the visual PDF it asked for, so a failure here is logged and downgraded to
+ * "no text layer" rather than thrown. What it must never do is pass silently:
+ * the console line is how a missing text layer is diagnosed, and
+ * `textLayer: false` is how the result page avoids claiming otherwise.
+ */
+async function readTextLayer(
+  tabId: number,
+  mode: TextLayerMode,
+  selector: ContainerSelector | null,
+  bottomAnchorShift: number,
+): Promise<ExtractedTextLayer | null> {
+  try {
+    const [{ result }] = (await chrome.scripting.executeScript({
+      target: { tabId },
+      func: extractTextLayer,
+      args: [mode, selector?.attr ?? "", selector?.value ?? "", bottomAnchorShift],
+    })) as unknown as [{ result: ExtractedTextLayer }];
+    if (!result || result.fragments.length === 0) {
+      console.warn("[FullScreenShot] PDF text layer: nothing extracted; exporting a visual-only PDF");
+      return result ?? null;
+    }
+    console.info(
+      `[FullScreenShot] PDF text layer: ${result.fragments.length} fragments, ` +
+        `${result.links.length} links, ${result.stats.elementsVisited} elements, ` +
+        `${result.stats.elapsedMs}ms${result.stats.truncated ? " (truncated)" : ""}`,
+    );
+    return result;
+  } catch (e) {
+    console.warn("[FullScreenShot] PDF text layer extraction failed; exporting a visual-only PDF", e);
+    return null;
+  }
 }
 
 function encodeComposite(
@@ -132,9 +178,14 @@ function encodeComposite(
   tileWidths: number[],
   tileHeights: number[],
   rgba: Uint8Array,
-): { bytes: Uint8Array; mimeType: string } {
+  textLayer: ExtractedTextLayer | null = null,
+  title = "",
+): { bytes: Uint8Array; mimeType: string; textLayer?: boolean } {
   if (format === "pdf") {
-    const bytes = composeFullPagePdf(
+    const json = textLayer
+      ? JSON.stringify({ fragments: textLayer.fragments, links: textLayer.links })
+      : "";
+    const result = composeFullPagePdf(
       Float64Array.from(offsets),
       contentWidth,
       contentHeight,
@@ -144,8 +195,21 @@ function encodeComposite(
       rgba,
       pdfOptions.pageSize,
       pdfOptions.orientation,
+      json,
+      title,
     );
-    return { bytes, mimeType: "application/pdf" };
+    if (textLayer && result.fragmentsDropped > 0) {
+      console.info(
+        `[FullScreenShot] PDF text layer: ${result.fragmentsPlaced} fragments and ` +
+          `${result.linksPlaced} links placed; ${result.fragmentsDropped} fragments and ` +
+          `${result.linksDropped} links fell outside the composited image`,
+      );
+    }
+    return {
+      bytes: result.bytes,
+      mimeType: "application/pdf",
+      textLayer: result.fragmentsPlaced > 0,
+    };
   }
   const bytes = composeFullPagePng(
     Float64Array.from(offsets),
@@ -424,10 +488,24 @@ export async function captureFullPage(
     }
 
     onProgress({ text: "Processing…" });
+
+    // The text layer is read last, from the top of the page, with nothing
+    // hidden: last because the DOM has by then finished whatever lazy loading
+    // the capture provoked, and from the top because a viewport-anchored bar
+    // is placed from where it renders, which is only the first band's picture
+    // of it when the page is at its origin.
+    const lastCapturedOffset = capturedOffsets[capturedOffsets.length - 1] ?? 0;
+    let textLayer: ExtractedTextLayer | null = null;
+    if (exportFormat === "pdf") {
+      onProgress({ text: "Reading text…" });
+      await chrome.scripting.executeScript({ target: { tabId }, func: scrollWindowToVerified, args: [0] });
+      textLayer = await readTextLayer(tabId, "page", null, lastCapturedOffset);
+    }
+
     const concatenated = concatenateRgba(rgbaChunks);
 
     const dpr = metrics.devicePixelRatio;
-    const { bytes, mimeType } = encodeComposite(
+    const { bytes, mimeType, textLayer: hasTextLayer } = encodeComposite(
       exportFormat,
       pdfOptions,
       capturedOffsets,
@@ -437,18 +515,20 @@ export async function captureFullPage(
       tileWidths,
       tileHeights,
       concatenated,
+      textLayer,
+      tab.title ?? "",
     );
 
     // Read back from the image rather than predicted from CSS geometry: at a
     // fractional device pixel ratio the prediction can be a pixel off, and
     // this number is what the result page shows and the metadata stores.
-    const lastOffset = capturedOffsets[capturedOffsets.length - 1] ?? 0;
     const declared = mimeType === "image/png" ? readPngDimensions(bytes) : null;
     return {
       bytes,
       mimeType,
       width: declared?.width ?? tileWidths[0] ?? 0,
-      height: declared?.height ?? Math.round((lastOffset + metrics.viewportHeight) * dpr),
+      height: declared?.height ?? Math.round((lastCapturedOffset + metrics.viewportHeight) * dpr),
+      ...(hasTextLayer === undefined ? {} : { textLayer: hasTextLayer }),
     };
   } finally {
     await chrome.scripting.executeScript({ target: { tabId }, func: restoreFixedAndStickyElements });
@@ -746,9 +826,22 @@ export async function captureScrollArea(
     }
 
     onProgress({ text: "Processing…" });
+
+    // Read before the container is released, while it still carries the
+    // marker attribute and sits where every band was cropped from. Only the
+    // container's own subtree is walked, and its rectangles come back in the
+    // container's content coordinates, so the page around it contributes
+    // nothing to the text layer — just as it contributes nothing to the
+    // picture.
+    let textLayer: ExtractedTextLayer | null = null;
+    if (exportFormat === "pdf") {
+      onProgress({ text: "Reading text…" });
+      textLayer = await readTextLayer(tabId, "container", selector, 0);
+    }
+
     const concatenated = concatenateRgba(rgbaChunks);
     const dpr = geometry.devicePixelRatio;
-    const { bytes, mimeType } = encodeComposite(
+    const { bytes, mimeType, textLayer: hasTextLayer } = encodeComposite(
       exportFormat,
       pdfOptions,
       capturedOffsets,
@@ -758,6 +851,8 @@ export async function captureScrollArea(
       tileWidths,
       tileHeights,
       concatenated,
+      textLayer,
+      tab.title ?? "",
     );
 
     const lastOffset = capturedOffsets[capturedOffsets.length - 1] ?? 0;
@@ -767,6 +862,7 @@ export async function captureScrollArea(
       mimeType,
       width: declared?.width ?? tileWidths[0] ?? 0,
       height: declared?.height ?? Math.round((lastOffset + geometry.visibleHeight) * dpr),
+      ...(hasTextLayer === undefined ? {} : { textLayer: hasTextLayer }),
     };
   } finally {
     // Put back the container's own scroll position (not 0 — wherever the user

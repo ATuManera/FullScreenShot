@@ -29,6 +29,15 @@ export function composeFullPagePng(
   tile_rgba_concat: Uint8Array,
 ): Uint8Array;
 
+export class PdfComposeResult {
+  free(): void;
+  readonly bytes: Uint8Array;
+  readonly fragmentsPlaced: number;
+  readonly fragmentsDropped: number;
+  readonly linksPlaced: number;
+  readonly linksDropped: number;
+}
+
 export function composeFullPagePdf(
   offsets: Float64Array,
   viewport_width: number,
@@ -39,7 +48,11 @@ export function composeFullPagePdf(
   tile_rgba_concat: Uint8Array,
   page_size: "a4" | "letter" | "auto",
   orientation: "portrait" | "landscape",
-): Uint8Array;
+  /** The in-page extractor's output as JSON, or "" for a visual-only PDF. */
+  text_layer_json: string,
+  /** Document title for PDF metadata, or "" to omit it. */
+  title: string,
+): PdfComposeResult;
 
 export function markdownFromJson(json: string, title: string, source: string, captured_at: string): string;
 

@@ -44,6 +44,8 @@ interface ResolvedExport {
   mimeType: string;
   width: number;
   height: number;
+  /** PDF only: whether a text layer was really written into the file. */
+  textLayer?: boolean;
 }
 
 /**
@@ -319,6 +321,12 @@ async function runCapture(msg: StartCaptureMessage, isCancelled: () => boolean):
     if (result.mimeType === "application/pdf") {
       metadata.pdfPageSize = msg.pdfPageSize;
       metadata.pdfOrientation = msg.pdfOrientation;
+      // Recorded only when the composer actually placed text: the Result
+      // Page must not describe a PDF as searchable on the strength of the
+      // export format alone.
+      if (result.textLayer !== undefined) {
+        metadata.textLayer = result.textLayer;
+      }
     }
     await saveResult(resultId, new Blob([new Uint8Array(result.bytes)], { type: result.mimeType }), filename, metadata);
 

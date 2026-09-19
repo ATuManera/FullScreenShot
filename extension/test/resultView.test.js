@@ -20,6 +20,7 @@ import {
   MISSING_BODY,
   MISSING_STATUS,
   READY_STATUS,
+  SEARCHABLE_TEXT_NOTE,
   TTL_NOTE,
   downloadButtonLabel,
   formatFormatSummary,
@@ -147,4 +148,36 @@ test("the fallback tells the reader what to do, without blaming the browser", ()
 
 test("the wait before giving up is short enough to feel like a response", () => {
   assert.ok(CLOSE_CONFIRMATION_DELAY_MS > 0 && CLOSE_CONFIRMATION_DELAY_MS <= 500, `${CLOSE_CONFIRMATION_DELAY_MS}ms`);
+});
+
+// The searchable-text note is a claim about the file, so it may only appear
+// when the composer reported placing text. A PDF of a page made entirely of
+// images has no text layer, and the Result Page must not say it does.
+
+test("a PDF only says it has searchable text when it really does", () => {
+  assert.equal(
+    formatFormatSummary("application/pdf", { pdfPageSize: "a4", pdfOrientation: "portrait", textLayer: true }),
+    `PDF · A4 · Portrait · ${SEARCHABLE_TEXT_NOTE}`,
+  );
+});
+
+test("a PDF whose text layer came back empty is described as a plain PDF", () => {
+  assert.equal(
+    formatFormatSummary("application/pdf", { pdfPageSize: "a4", pdfOrientation: "portrait", textLayer: false }),
+    "PDF · A4 · Portrait",
+  );
+});
+
+test("a PDF saved before text layers existed makes no claim either way", () => {
+  assert.equal(
+    formatFormatSummary("application/pdf", { pdfPageSize: "letter", pdfOrientation: "landscape" }),
+    "PDF · Letter · Landscape",
+  );
+});
+
+test("an Auto-sized searchable PDF still says so", () => {
+  assert.equal(
+    formatFormatSummary("application/pdf", { pdfPageSize: "auto", pdfOrientation: "portrait", textLayer: true }),
+    `PDF · Portrait · ${SEARCHABLE_TEXT_NOTE}`,
+  );
 });
