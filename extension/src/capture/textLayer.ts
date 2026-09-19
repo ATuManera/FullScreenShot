@@ -253,8 +253,14 @@ export function extractTextLayer(
     const w = right - left;
     const h = bottom - top;
     if (!plausible(w, h)) return;
-    const collapsed = text.replace(/\s+/g, " ").trim();
-    if (collapsed.length === 0) return;
+    // Whitespace is collapsed the way CSS collapses it, but a leading or
+    // trailing space is *kept*. Two adjacent inline runs — "la palabra" and
+    // a bold "información" — have no gap between their boxes, so a reader
+    // copying them back out has nothing to insert a space from, and the
+    // source's own space is the only thing that keeps "la palabra
+    // información" from being copied as "la palabrainformación".
+    const collapsed = text.replace(/\s+/g, " ");
+    if (collapsed.trim().length === 0) return;
     fragments.push({
       text: collapsed,
       x: left - originX,
@@ -343,6 +349,11 @@ export function extractTextLayer(
         }
         lines.push({ ...word });
       }
+      // The same reasoning as above, at the ends of a wrapped node.
+      const firstLine = lines[0];
+      const lastLine = lines[lines.length - 1];
+      if (firstLine && /^\s/.test(raw)) firstLine.text = " " + firstLine.text;
+      if (lastLine && /\s$/.test(raw)) lastLine.text += " ";
       for (const line of lines) {
         pushFragment(line.text, line.left, line.top, line.right, line.bottom, size, frame.shiftY);
       }

@@ -22,10 +22,19 @@
 <body>
   <h1>Exactly one internal scroll region</h1>
   <p class="note">The popup must offer &ldquo;Scroll area / 1 scrollable region detected&rdquo; and capture directly, with no visual picker.</p>
+  <!--
+    Text and a link outside the panel. A scroll-area PDF's text layer must
+    contain neither: the capture is the container's content, and anything the
+    picture leaves out the text layer has to leave out too.
+  -->
+  <p class="note" id="outside-text">TEXTO FUERA DEL PANEL que no debe aparecer en el PDF del area de scroll.</p>
+  <p class="note"><a id="outside-link" href="https://example.com/fuera">enlace fuera del panel</a></p>
   <div class="panel" id="only-panel">
     <div class="row">PANEL ROW 1</div>
     <div class="row">PANEL ROW 2</div>
     <div class="row">PANEL ROW 3</div>
+    <div class="row" id="accented-row">FILA CON ACENTOS: informaci&oacute;n auditor&iacute;a Per&uacute; se&ntilde;al</div>
+    <div class="row"><a id="inside-link" href="https://example.com/dentro">ENLACE DENTRO DEL PANEL</a></div>
     <div class="row">PANEL ROW 4</div>
     <div class="row">PANEL ROW 5</div>
     <div class="row">PANEL ROW 6</div>

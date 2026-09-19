@@ -1,0 +1,433 @@
+{
+ "fragments": [
+  {
+   "text": "Cabecera fija — Informe de auditoría",
+   "x": 32,
+   "y": 17,
+   "w": 289.828125,
+   "h": 18,
+   "size": 16
+  },
+  {
+   "text": "Información de auditoría del Perú",
+   "x": 32,
+   "y": 110.59375,
+   "w": 598.3125,
+   "h": 38,
+   "size": 34
+  },
+  {
+   "text": " Este párrafo abre el documento y contiene la palabra ",
+   "x": 32,
+   "y": 161.390625,
+   "w": 398.78125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "información",
+   "x": 430.78125,
+   "y": 161.390625,
+   "w": 109.046875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": " en negrita, la palabra ",
+   "x": 539.828125,
+   "y": 161.390625,
+   "w": 162.75,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "auditoría",
+   "x": 32,
+   "y": 188.578125,
+   "w": 72.03125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": " en cursiva y el término técnico ",
+   "x": 104.03125,
+   "y": 188.578125,
+   "w": 236.140625,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "señal",
+   "x": 344.171875,
+   "y": 192.578125,
+   "w": 45.015625,
+   "h": 17,
+   "size": 15
+  },
+  {
+   "text": ". Sirve para comprobar que el texto de la",
+   "x": 393.1875,
+   "y": 188.578125,
+   "w": 301.796875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "parte superior se encuentra, se selecciona y se copia. ",
+   "x": 32,
+   "y": 216.578125,
+   "w": 391.890625,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": " Enlace cerca del principio: ",
+   "x": 32,
+   "y": 261.765625,
+   "w": 202.53125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "documento de origen",
+   "x": 234.53125,
+   "y": 261.765625,
+   "w": 158.90625,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": ". También hay una referencia relativa que el",
+   "x": 393.4375,
+   "y": 261.765625,
+   "w": 327.8125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "navegador resuelve: ",
+   "x": 32,
+   "y": 288.953125,
+   "w": 149.859375,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "informes de 2026",
+   "x": 185.953125,
+   "y": 288.953125,
+   "w": 132.453125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": ". ",
+   "x": 318.40625,
+   "y": 288.953125,
+   "w": 4.59375,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": " Enlaces que no deben convertirse en anotaciones: ",
+   "x": 32,
+   "y": 334.140625,
+   "w": 376.234375,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "acción de página",
+   "x": 408.234375,
+   "y": 334.140625,
+   "w": 124.90625,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": ", ",
+   "x": 533.140625,
+   "y": 334.140625,
+   "w": 8.6875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "recurso incrustado",
+   "x": 541.828125,
+   "y": 334.140625,
+   "w": 140.453125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": " y ",
+   "x": 682.28125,
+   "y": 334.140625,
+   "w": 12.46875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "correo",
+   "x": 32,
+   "y": 361.328125,
+   "w": 48.203125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": ". ",
+   "x": 80.203125,
+   "y": 361.328125,
+   "w": 4.59375,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "Texto que se parte en varias líneas",
+   "x": 32,
+   "y": 426.515625,
+   "w": 422.375,
+   "h": 27,
+   "size": 24
+  },
+  {
+   "text": " Este párrafo es deliberadamente estrecho",
+   "x": 32,
+   "y": 466.515625,
+   "w": 310.109375,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "para que el navegador lo reparta en varias",
+   "x": 32,
+   "y": 493.703125,
+   "w": 313.515625,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "líneas visuales, de modo que la capa de",
+   "x": 32,
+   "y": 520.890625,
+   "w": 291.375,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "texto tenga que dividir un único nodo en",
+   "x": 32,
+   "y": 548.078125,
+   "w": 303.046875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "tantos renglones como se vean en la",
+   "x": 32,
+   "y": 575.265625,
+   "w": 268.53125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "pantalla, sin que la selección se desplace ni",
+   "x": 32,
+   "y": 602.453125,
+   "w": 320.921875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "se amontone. ",
+   "x": 32,
+   "y": 629.640625,
+   "w": 100.296875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": " Un enlace largo que también se parte: ",
+   "x": 32,
+   "y": 674.828125,
+   "w": 283.25,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": " referencia extensa que ocupa más de una",
+   "x": 32,
+   "y": 702.015625,
+   "w": 306.578125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "línea completa ",
+   "x": 32,
+   "y": 729.203125,
+   "w": 109.875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": ". ",
+   "x": 145.96875,
+   "y": 729.203125,
+   "w": 4.59375,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "Acentos, eñes y diéresis",
+   "x": 32,
+   "y": 794.390625,
+   "w": 291.703125,
+   "h": 27,
+   "size": 24
+  },
+  {
+   "text": " información · auditoría · Perú · señal · ñandú · Ñuñoa · pingüino · Über · «comillas",
+   "x": 32,
+   "y": 834.390625,
+   "w": 614.796875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "angulares» · signos ¿de? ¡interrogación! ",
+   "x": 32,
+   "y": 861.578125,
+   "w": 298.421875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "Contenido intermedio",
+   "x": 32,
+   "y": 1017.140625,
+   "w": 273.09375,
+   "h": 27,
+   "size": 24
+  },
+  {
+   "text": " Marcador intermedio: la verificación busca esta frase para comprobar que el texto del centro",
+   "x": 32,
+   "y": 1057.140625,
+   "w": 691.234375,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "del documento también es localizable en el PDF. ",
+   "x": 32,
+   "y": 1084.328125,
+   "w": 362.078125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "Contenido inferior",
+   "x": 32,
+   "y": 2067.515625,
+   "w": 231.46875,
+   "h": 27,
+   "size": 24
+  },
+  {
+   "text": " Marcador inferior: esta frase cierra el documento y debe poder buscarse en la última página",
+   "x": 32,
+   "y": 2107.515625,
+   "w": 685.46875,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "del PDF, igual que la de arriba y la del centro. ",
+   "x": 32,
+   "y": 2134.703125,
+   "w": 340.25,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": " Enlace cerca del final: ",
+   "x": 32,
+   "y": 2179.890625,
+   "w": 168.25,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "referencia final",
+   "x": 200.25,
+   "y": 2179.890625,
+   "w": 113.515625,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": ". ",
+   "x": 313.765625,
+   "y": 2179.890625,
+   "w": 4.59375,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "Última línea del documento de aceptación.",
+   "x": 32,
+   "y": 2225.078125,
+   "w": 319.953125,
+   "h": 20,
+   "size": 17
+  },
+  {
+   "text": "Pie fijo — página 1 de 1 · FullScreenShot",
+   "x": 32,
+   "y": 2330,
+   "w": 274.34375,
+   "h": 17,
+   "size": 15
+  }
+ ],
+ "links": [
+  {
+   "uri": "https://example.com/principio",
+   "x": 234.53125,
+   "y": 261.765625,
+   "w": 158.90625,
+   "h": 20
+  },
+  {
+   "uri": "http://127.0.0.1:8765/informes/2026",
+   "x": 185.953125,
+   "y": 288.953125,
+   "w": 132.453125,
+   "h": 20
+  },
+  {
+   "uri": "https://example.com/una/ruta/bastante/larga/para/partirse",
+   "x": 32,
+   "y": 702.015625,
+   "w": 306.578125,
+   "h": 20
+  },
+  {
+   "uri": "https://example.com/una/ruta/bastante/larga/para/partirse",
+   "x": 32,
+   "y": 729.203125,
+   "w": 113.96875,
+   "h": 20
+  },
+  {
+   "uri": "https://example.com/final",
+   "x": 200.25,
+   "y": 2179.890625,
+   "w": 113.515625,
+   "h": 20
+  }
+ ]
+}

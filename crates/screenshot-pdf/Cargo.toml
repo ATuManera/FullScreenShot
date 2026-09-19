@@ -13,3 +13,9 @@ pdf-writer = "0.12"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 flate2 = "1"
+
+[dev-dependencies]
+# The integration tests read back the PDFs this crate writes; inflating a
+# stream is all they need, and the crate already depends on flate2 to write
+# them.
+flate2 = "1"
