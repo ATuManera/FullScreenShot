@@ -497,6 +497,12 @@ export async function captureFullPage(
     const lastCapturedOffset = capturedOffsets[capturedOffsets.length - 1] ?? 0;
     let textLayer: ExtractedTextLayer | null = null;
     if (exportFormat === "pdf") {
+      // Checked here too: `readTextLayer` swallows its own failures by
+      // design, so without this a Cancel pressed during the read would be
+      // swallowed with them and the capture would finish anyway.
+      if (isCancelled()) {
+        throw new CaptureCancelledError();
+      }
       onProgress({ text: "Reading text…" });
       await chrome.scripting.executeScript({ target: { tabId }, func: scrollWindowToVerified, args: [0] });
       textLayer = await readTextLayer(tabId, "page", null, lastCapturedOffset);
@@ -835,6 +841,9 @@ export async function captureScrollArea(
     // picture.
     let textLayer: ExtractedTextLayer | null = null;
     if (exportFormat === "pdf") {
+      if (isCancelled()) {
+        throw new CaptureCancelledError();
+      }
       onProgress({ text: "Reading text…" });
       textLayer = await readTextLayer(tabId, "container", selector, 0);
     }
