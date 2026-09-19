@@ -365,6 +365,67 @@ fractional device pixel ratio) as well as the default.
 - [ ] H10. There is no longer an "Extension options" entry in the extension's
       own menu on `chrome://extensions` — Settings lives only in the popup.
 
+### Gate P — the PDF is a document, not just a picture
+
+Automated checks proved the text layer with poppler, qpdf and PDFium
+separately. What could **not** be automated is the thing that actually
+matters to a reader: searching, selecting, copying and clicking inside a
+real PDF viewer. Chrome's PDF viewer exposes neither its find bar nor its
+accessibility tree to automation, so every item below is unverified until
+you run it.
+
+Use `tests/pages/pdf-text-acceptance.html` (open it from disk) unless an
+item says otherwise.
+
+- [ ] P1. Full page → PDF → A4 → Portrait. The result page says
+      **"PDF · A4 · Portrait · Searchable text"**. If it does not say
+      "Searchable text", stop and report it — the rest of this gate is
+      meaningless.
+- [ ] P2. Open the PDF in Chrome. It looks **exactly** like the PNG of the
+      same page: same colours, same layout, no text drawn twice, no ghost
+      text, no boxes around links.
+- [ ] P3. Cmd+F in the viewer → search `Marcador inferior`. It is found, on
+      the last page.
+- [ ] P4. Search `información`, `auditoría`, `Perú`, `señal`, `pingüino`.
+      Each is found, with its accent.
+- [ ] P5. Search `no debe aparecer`. It must find **nothing** — that text is
+      hidden on the page five different ways and must not be in the PDF.
+- [ ] P6. Drag-select the first paragraph. The highlight sits over the words
+      you are dragging across, not above or below them, and not shifted
+      sideways.
+- [ ] P7. Copy that selection and paste it somewhere. It reads like the
+      original sentence, with spaces around the bold and italic words —
+      "la palabra información en negrita", not "la palabrainformación".
+- [ ] P8. Select the narrow, wrapped paragraph. Each line highlights as its
+      own line; the words do not pile up on the first one.
+- [ ] P9. Click the link near the top. It opens `example.com/principio`.
+- [ ] P10. Click the **second half** of the link that wraps across two
+      lines. It opens too — both halves are clickable.
+- [ ] P11. Click the link near the bottom. It opens `example.com/final`.
+- [ ] P12. The three links that must **not** be clickable — "acción de
+      página" (`javascript:`), "recurso incrustado" (`data:`) and "correo"
+      (`mailto:`) — do nothing. Nothing runs, nothing opens.
+- [ ] P13. The fixed footer text ("Pie fijo") appears **once** in the PDF,
+      at the bottom, and is searchable there. Search it and confirm one
+      match, not one per page.
+- [ ] P14. The sticky header ("Cabecera fija") appears **once**, at the top.
+- [ ] P15. Repeat P1–P3 with **Letter** and with **Auto**. Auto is a single
+      long page; search still works at its very bottom.
+- [ ] P16. `tests/pages/scrollarea-single.html` → Scroll area → PDF. Search
+      `PANEL ROW 14`: found. Search `FUERA DEL PANEL`: **not** found — the
+      page around the container must not be in the text layer. The link
+      inside the panel is clickable.
+- [ ] P17. A real long page (a Wikipedia article) → Full page → PDF. Search
+      a word from the top, one from the middle and one from the end. The
+      export does not feel noticeably slower than the PNG of the same page.
+- [ ] P18. A page made mostly of images (an image gallery) → PDF. It still
+      exports, and the result page does **not** claim "Searchable text" if
+      there was no text to place.
+- [ ] P19. Open one of these PDFs in macOS Preview as well. Visual, search
+      and copy behave the same as in Chrome.
+- [ ] P20. Full page → **PNG** on the same pages. The PNGs are unchanged
+      from before this branch — the PDF work must not have touched them.
+
 ### Gate E — nothing already working regressed
 
 - [ ] E1. Visible area still captures exactly the current viewport.
@@ -375,6 +436,8 @@ fractional device pixel ratio) as well as the default.
       scroll, and leaves the popup ready for a new capture.
 - [ ] E5. A page with no fixed or sticky elements at all captures exactly as
       before, with no extra pause at the end.
+- [ ] E6. Markdown export is unchanged — the PDF work did not touch it.
+- [ ] E7. Scroll area → PNG still produces exactly the container's content.
 
 ## Sign-off
 
