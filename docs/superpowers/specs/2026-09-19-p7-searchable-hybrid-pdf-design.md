@@ -202,6 +202,25 @@ resultado solo añade «Searchable text» cuando el compositor informó de
 haber colocado fragmentos — nunca por el mero hecho de que el formato sea
 PDF.
 
+### Auto-contención de los inyectables — invariante, no convención
+
+`chrome.scripting.executeScript({ func })` **no inyecta un módulo**: serializa
+la función con `Function.prototype.toString()` y reevalúa ese texto dentro de
+la página, donde nada más de este repositorio existe. Una función inyectada
+que llama a un ayudante de su propio módulo funciona en todos los tests
+(que importan el módulo) y lanza `ReferenceError` en el único sitio que
+importa.
+
+Eso no es hipotético: fue el fallo de los enlaces clicables (ver
+«Historial»). El invariante estaba escrito en un comentario y no lo
+comprobaba nadie.
+
+Ahora lo comprueba `extension/test/injectableSelfContainment.test.js` para
+las dieciséis funciones que la extensión inyecta: el código fuente de cada
+una no puede referenciar ningún otro binding de su módulo. Lo que el
+inyectable necesite, lo lleva dentro — igual que `injectable.ts` ya inlinea
+`classifyFixedAnchor`.
+
 ### Entrada no confiable
 
 El JSON del extractor cruza la frontera WASM y se valida en un único punto
@@ -263,11 +282,13 @@ página rara.
 - En Scroll Area, un overlay `position: fixed` que cubra el contenedor
   aparece en la imagen pero no en la capa de texto (no es descendiente del
   contenedor).
-- Búsqueda/selección/copia/pulsación **dentro del visor PDF de Chrome** no
-  se pudieron automatizar: el plugin no expone su árbol de accesibilidad ni
-  su barra de búsqueda a la automatización. Verificado en su lugar con
-  poppler y PDFium por separado; la comprobación interactiva queda para el
-  gate físico del propietario.
+- Búsqueda/selección/copia **dentro del visor PDF de Chrome** no se pudieron
+  automatizar: el plugin no expone su árbol de accesibilidad ni su barra de
+  búsqueda. Verificado en su lugar con poppler y PDFium por separado; la
+  comprobación interactiva queda para el gate físico del propietario.
+  **La pulsación de enlaces sí resultó automatizable** (ver «Historial»,
+  2026-09-19 `34bd5fa`): un `page.mouse.click()` en las coordenadas del
+  hotspot llega al plugin y la navegación resultante es observable.
 
 ## Historial
 
@@ -276,3 +297,4 @@ página rara.
 | 2026-09-19 | `7369f03`                        | Núcleo Rust: mapa de bandas público, `transform`, `text_layer`, `font` glyphless, generador híbrido con texto invisible y anotaciones de enlace.       |
 | 2026-09-19 | `e10ae30`                        | Extractor DOM en la extensión, puente WASM `PdfComposeResult`, wiring de Full Page y Scroll Area, metadatos de resultado y copia honesta en Result.    |
 | 2026-09-19 | `dae8458`                        | Fixture de aceptación, fixture de scroll area ampliada, fixtures capturadas en Chromium real y tests de integración; corrección de espacios inline.    |
+| 2026-09-19 | `34bd5fa`                        | **Reparación de enlaces clicables**: `extractTextLayer` llamaba a `isSupportedLinkUri`, un ayudante de su propio módulo, y `executeScript({ func })` reevalúa la función sin ámbito de módulo — el primer `<a>` lanzaba `ReferenceError`, la extracción se abortaba entera y el PDF salía sin enlaces ni texto. Comprobación inlineada + test de auto-contención para los dieciséis inyectables. |
