@@ -56,6 +56,26 @@ Known limits, stated plainly:
 See [ADR-0007](docs/architecture/ADR-0007-hybrid-pdf-text-layer.md) for
 why it is built this way.
 
+## The Markdown export
+
+Markdown comes from the DOM, never from OCR, and it represents what the
+page actually shows.
+
+- **Hidden text stays out.** Content the browser does not render —
+  `display:none`, `visibility:hidden`/`collapse`, `opacity:0`, the
+  `hidden` attribute, `content-visibility:hidden`, and the clipped
+  one-pixel box screen-reader-only text uses — is not exported.
+  `aria-hidden` content *is* exported, because it is still on screen.
+- **Prose stays prose.** A page's own HTML source indentation is
+  collapsed the way CSS collapses it, so a paragraph never arrives as
+  an indented code block. Preformatted content keeps its whitespace
+  byte for byte, decided by computed `white-space` rather than tag
+  name.
+- **Links travel.** Relative hrefs are exported as the absolute URLs
+  the browser resolved them to, so the file still works once it leaves
+  the site. `javascript:` and `data:` links keep their text and lose
+  their link.
+
 ## Architecture
 
 ```text

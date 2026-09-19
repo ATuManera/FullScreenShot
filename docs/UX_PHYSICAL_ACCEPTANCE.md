@@ -389,6 +389,42 @@ re-confirmation rather than an investigation.
       `PDF text layer: 49 fragments, 5 links, … ms` — and **no** warning
       about extraction having failed.
 
+### Gate M — the Markdown file is worth keeping
+
+Exporting the acceptance page produced a file with hidden text in it,
+paragraphs Markdown reads as code blocks, and a link that only worked on the
+site it came from. All three are fixed and machine-verified against ASTs a
+real Chromium produced; what is unverified is the extension running in your
+Chrome.
+
+Use `tests/pages/pdf-text-acceptance.html`, and open the downloaded `.md` in
+whatever you would actually keep it in (Obsidian, a GitHub preview, or a
+plain editor).
+
+- [ ] M1. Popup → Markdown → Full DOM → export, and open the file.
+- [ ] M2. Search it for `no debe aparecer`. **Nothing** may match: the page
+      hides that text five different ways and none of it belongs in the file.
+- [ ] M3. No paragraph is rendered as a grey code block. In a plain editor,
+      no line of prose begins with four spaces.
+- [ ] M4. The opening paragraph reads as one sentence with its spacing
+      intact — "la palabra **información** en negrita", not
+      "la palabra**información**en negrita".
+- [ ] M5. The link "informes de 2026" points at an absolute URL, not
+      `/informes/2026`. Click it; it resolves somewhere, rather than nowhere.
+- [ ] M6. "documento de origen" and "referencia final" still point at
+      `example.com`, unchanged.
+- [ ] M7. "acción de página" and "recurso incrustado" are plain text, not
+      links. "correo" is still a `mailto:` link.
+- [ ] M8. The YAML front matter is intact: title, source, captured_at,
+      generator, repository.
+- [ ] M9. Headings, bold, italic and inline code all survive, in page order.
+- [ ] M10. `tests/pages/markdown-content.html` → Markdown → Article. The two
+      code blocks keep their own indentation exactly; the table keeps both
+      columns; the list and blockquote are intact.
+- [ ] M11. A real article (a Wikipedia page) → Markdown. It reads like the
+      article, with no stray blank-line runs and no navigation text the page
+      hides.
+
 ### Gate P — the PDF is a document, not just a picture
 
 Automated checks proved the text layer with poppler, qpdf and PDFium
@@ -461,7 +497,8 @@ item says otherwise.
       scroll, and leaves the popup ready for a new capture.
 - [ ] E5. A page with no fixed or sticky elements at all captures exactly as
       before, with no extra pause at the end.
-- [ ] E6. Markdown export is unchanged — the PDF work did not touch it.
+- [ ] E6. PDF and PNG exports are unchanged — the Markdown work did not
+      touch them (Gate P still passes).
 - [ ] E7. Scroll area → PNG still produces exactly the container's content.
 
 ## Sign-off

@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Markdown export quality: hidden page content (`display:none`,
+  `visibility:hidden`/`collapse`, `opacity:0`, `[hidden]`,
+  `content-visibility:hidden`, screen-reader-only clipped boxes) is no
+  longer exported; a page's HTML source indentation is collapsed so prose
+  is never rendered as an indented code block, while preformatted content
+  keeps its whitespace exactly; and relative links are exported as the
+  absolute URLs the browser resolved, so a saved `.md` still works away
+  from the site it came from.
 - P7: searchable/selectable hybrid PDF — the PDF export keeps the
   screenshot as its visual layer and adds an invisible DOM-derived text
   layer (searchable, selectable, copyable) plus clickable `/Link`
