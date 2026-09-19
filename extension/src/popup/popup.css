@@ -64,6 +64,19 @@ body {
 }
 
 /* Header */
+
+/*
+ * Portability insurance, not a bug fix: `.progress-row`, `.mode-card` and
+ * `.row-action` below all set `display`, and they only lose to the browser's
+ * own `[hidden]` rule because Chrome marks that rule `!important`. Nothing in
+ * the HTML spec requires that, so stating it here keeps `element.hidden` from
+ * silently becoming a no-op on a browser that follows the plain cascade —
+ * Safari being the next target this codebase carries.
+ */
+[hidden] {
+  display: none !important;
+}
+
 .header {
   display: flex;
   align-items: center;

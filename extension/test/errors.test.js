@@ -95,3 +95,17 @@ test("maps the raw compositor dimension error it used to surface to safe copy", 
   assert.doesNotMatch(friendly.title, /dimensions|\d+x\d+/i);
   assert.doesNotMatch(friendly.body, /dimensions|\d+x\d+/i);
 });
+
+test("maps a genuinely oversized capture to copy that names smaller alternatives", () => {
+  const friendly = mapBrowserError("capture is too large: 200000x200000 exceeds the 100000000-pixel composition budget");
+  assert.equal(friendly.title, "Capture is too large");
+  assert.match(friendly.body, /scroll area|visible area/i);
+  // Reliable loads more content, so it makes a capture larger — never suggest it here.
+  assert.doesNotMatch(friendly.body, /reliable/i);
+});
+
+test("never shows the raw pixel budget or dimensions to the user", () => {
+  const friendly = mapBrowserError("capture is too large: 200000x200000 exceeds the 100000000-pixel composition budget");
+  assert.doesNotMatch(friendly.title, /\d/);
+  assert.doesNotMatch(friendly.body, /\d/);
+});

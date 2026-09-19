@@ -63,6 +63,13 @@ let active: ActiveCapture | null = null;
 let cancelRequested = false;
 
 /**
+ * Identifies the capture currently running, so every message it emits can be
+ * attributed to it and a late update from a finished capture can be
+ * recognised as such by the popup.
+ */
+let captureSessionId: string | null = null;
+
+/**
  * Pushes an update to whichever popup instance is currently open, if
  * any. `chrome.runtime.sendMessage` has no persistent-connection state
  * to go stale: if no popup is listening, the call simply has no
@@ -71,7 +78,7 @@ let cancelRequested = false;
  * error, so the rejection is swallowed rather than surfaced.
  */
 function broadcast(message: OutboundMessage): void {
-  chrome.runtime.sendMessage(message).catch(() => {
+  chrome.runtime.sendMessage(captureSessionId ? { ...message, sessionId: captureSessionId } : message).catch(() => {
     // No popup open to receive it — expected, not a failure.
   });
 }
@@ -234,6 +241,7 @@ async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (mes
 }
 
 async function runCapture(msg: StartCaptureMessage, isCancelled: () => boolean): Promise<void> {
+  captureSessionId = crypto.randomUUID();
   active = { mode: msg.mode, progress: { text: "Preparing…" } };
   broadcast({ type: "PROGRESS", text: "Preparing…" });
   setBadgeIndeterminate();
@@ -277,8 +285,13 @@ async function runCapture(msg: StartCaptureMessage, isCancelled: () => boolean):
     await chrome.tabs.create({ url: chrome.runtime.getURL(`result/result.html?id=${encodeURIComponent(resultId)}`) });
 
     setBadgeSuccess();
+    // Released before anyone is told the capture ended, so a popup that
+    // answers a terminal message with GET_STATE can never be told a capture
+    // is still running.
+    active = null;
     broadcast({ type: "DONE", resultId, width: result.width, height: result.height });
   } catch (e) {
+    active = null;
     if (e instanceof CaptureCancelledError) {
       clearBadge();
       broadcast({ type: "CANCELLED" });
@@ -293,6 +306,7 @@ async function runCapture(msg: StartCaptureMessage, isCancelled: () => boolean):
     broadcast({ type: "ERROR", message: e instanceof Error ? e.message : String(e) });
   } finally {
     active = null;
+    captureSessionId = null;
   }
 }
 
@@ -309,7 +323,7 @@ chrome.runtime.onMessage.addListener((raw: unknown, _sender, sendResponse: (resp
   }
 
   if (message.type === "GET_STATE") {
-    sendResponse(buildStateMessage(active));
+    sendResponse({ ...buildStateMessage(active), ...(captureSessionId ? { sessionId: captureSessionId } : {}) });
     return false;
   }
 

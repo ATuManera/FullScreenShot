@@ -49,6 +49,17 @@ const SCROLL_AREA_UNAVAILABLE: FriendlyError = {
   body: "Scroll the region into view so it's fully on screen, then try again.",
 };
 
+/**
+ * The composite is beyond the size the Rust core will compose. Deliberately
+ * does not suggest Reliable mode: Reliable loads *more* content, so it makes
+ * a capture larger, never smaller. The two alternatives named are the ones
+ * that genuinely produce a smaller image.
+ */
+const TOO_LARGE: FriendlyError = {
+  title: "Capture is too large",
+  body: "This page exceeds FullScreenShot's safe image size. Try capturing a scroll area or the visible area.",
+};
+
 const GENERIC: FriendlyError = {
   title: "Capture failed",
   body: "Something went wrong while capturing this page. Please try again.",
@@ -79,6 +90,7 @@ const PATTERNS: Array<{ test: RegExp; friendly: FriendlyError }> = [
   { test: /does not allow extensions to capture/i, friendly: PROTECTED_PAGE },
   { test: /no longer on the page/i, friendly: NO_SCROLL_CONTAINER },
   { test: /did not scroll as expected/i, friendly: DID_NOT_SCROLL },
+  { test: /capture is too large/i, friendly: TOO_LARGE },
   { test: /could not be brought into view|moved while it was being captured/i, friendly: SCROLL_AREA_UNAVAILABLE },
   { test: /infinite scroll/i, friendly: PAGE_CHANGED },
   { test: /tab was closed|no tab with id|frame was removed/i, friendly: CAPTURE_INTERRUPTED },

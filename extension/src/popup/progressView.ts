@@ -41,6 +41,36 @@ export interface ProgressUiState {
 const IDLE: ProgressUiState = { busy: false, progressText: null };
 
 /**
+ * Whether an update describes a capture that has already reached a terminal
+ * state, and so must not be allowed to put the busy UI back on screen.
+ *
+ * Two kinds of message can say "still working" about a capture that is over.
+ * A `GET_STATE` reply is a snapshot of the moment it was answered, so one
+ * requested just before a capture failed still reads "Processing…" by the
+ * time it arrives — which is what a popup reopened near the end of a capture
+ * asks for. And `chrome.runtime.sendMessage` gives no ordering guarantee
+ * between separate calls, so a PROGRESS can simply overtake the ERROR that
+ * ended its capture. Either one leaves a progress bar and Cancel sitting
+ * under "Capture failed". Arrival order cannot be trusted; the capture's own
+ * identity can.
+ *
+ * Terminal messages are never stale — they are what makes a session finished
+ * — and an idle STATE contradicts nothing, so both are always applied.
+ */
+export function describesAFinishedCapture(message: ProgressRelevantMessage, finishedSessionId: string | null): boolean {
+  if (finishedSessionId === null) {
+    return false;
+  }
+  if (message.type === "STATE") {
+    return message.active && message.sessionId === finishedSessionId;
+  }
+  if (message.type === "PROGRESS") {
+    return message.sessionId === finishedSessionId;
+  }
+  return false;
+}
+
+/**
  * The single source of truth for "what should the popup's busy/progress
  * UI look like after this message" — every background message that can
  * affect it maps to exactly one state here (section 19's IDLE/CAPTURING

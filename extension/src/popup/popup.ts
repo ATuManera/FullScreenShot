@@ -7,7 +7,7 @@ import { rankAndDeduplicate, classifyScrollAreaUiState } from "../capture/scroll
 import { type CaptureMode, type ExportFormat, type InboundMessage, type MarkdownExportMode, type OutboundMessage, type PdfOrientation, type PdfPageSize } from "../background/messages.js";
 import { mapBrowserError, type FriendlyError } from "./errors.js";
 import { DEFAULT_PREFERENCES, loadPreferences, savePreferences, type LazyModePreference } from "./preferences.js";
-import { progressStateForMessage, type ProgressUiState } from "./progressView.js";
+import { describesAFinishedCapture, progressStateForMessage, type ProgressRelevantMessage, type ProgressUiState } from "./progressView.js";
 
 const PROTECTED_PAGE: FriendlyError = {
   title: "Capture unavailable on this page",
@@ -274,16 +274,60 @@ async function sendCommand(message: InboundMessage): Promise<OutboundMessage | n
   }
 }
 
+/** Wipes the progress readout so a finished capture leaves nothing behind in the DOM. */
+function clearProgress(): void {
+  progressText.textContent = "";
+  progressBar.removeAttribute("data-indeterminate");
+  progressBar.removeAttribute("aria-valuenow");
+  progressFill.style.width = "0%";
+}
+
 /** Applies a progress/busy decision (from progressView.ts) to the actual DOM. */
 function applyProgressUiState(state: ProgressUiState): void {
   setBusy(state.busy);
   if (state.progressText !== null) {
     renderProgress(state.progressText, state.progressCurrent, state.progressTotal);
+    return;
   }
+  // No text to show and nothing running: clear the readout rather than leave
+  // the last capture's words sitting in a hidden row, ready to reappear.
+  if (!state.busy) {
+    clearProgress();
+  }
+}
+
+/**
+ * The capture whose lifecycle has already ended.
+ *
+ * Two kinds of update can describe a capture that is already over. A
+ * `GET_STATE` reply is a snapshot taken when the command was answered, so one
+ * requested moments before a capture failed still says "Processing…" when it
+ * arrives — and a popup reopened near the end of a capture does exactly that,
+ * which is how a failed capture came to sit under its own error notice still
+ * showing a progress bar and Cancel. A PROGRESS can arrive late for the same
+ * reason, since `chrome.runtime.sendMessage` gives no ordering guarantee
+ * between separate calls. Neither is state; both are history.
+ */
+let finishedSession: string | null = null;
+
+/** Applies an update unless it is a stale description of a capture that already ended. */
+function applyUpdate(message: ProgressRelevantMessage): void {
+  if (describesAFinishedCapture(message, finishedSession)) {
+    return;
+  }
+  applyProgressUiState(progressStateForMessage(message));
 }
 
 chrome.runtime.onMessage.addListener((raw: unknown) => {
   const message = raw as OutboundMessage;
+  if (message.type !== "STARTED" && describesAFinishedCapture(message, finishedSession)) {
+    return;
+  }
+  if (message.type === "DONE" || message.type === "CANCELLED" || message.type === "ERROR" || message.type === "NO_CONTAINER_SELECTED") {
+    if (message.sessionId !== undefined) {
+      finishedSession = message.sessionId;
+    }
+  }
   switch (message.type) {
     case "STATE":
     case "PROGRESS":
@@ -311,7 +355,7 @@ chrome.runtime.onMessage.addListener((raw: unknown) => {
 cancelBtn.addEventListener("click", () => {
   void sendCommand({ type: "CANCEL" }).then((response) => {
     if (response?.type === "STATE") {
-      applyProgressUiState(progressStateForMessage(response));
+      applyUpdate(response);
     }
   });
 });
@@ -350,7 +394,7 @@ async function startCapture(mode: CaptureMode): Promise<void> {
     // state right away instead of leaving stale text up until the next
     // PROGRESS broadcast happens to arrive.
     const freshState = await sendCommand({ type: "GET_STATE" });
-    applyProgressUiState(progressStateForMessage(freshState?.type === "STATE" ? freshState : response));
+    applyUpdate(freshState?.type === "STATE" ? freshState : response);
     showError({ title: "Capture already running", body: "Wait for the current capture to finish, or cancel it, before starting another." }, "already capturing");
     return;
   }
@@ -379,7 +423,10 @@ async function main(): Promise<void> {
   await applyStoredPreferences();
   const state = await sendCommand({ type: "GET_STATE" });
   if (state?.type === "STATE") {
-    applyProgressUiState(progressStateForMessage(state));
+    // The reply describes the moment it was answered. If the capture it
+    // describes has finished in the meantime — and the terminal message
+    // arrived here first — this snapshot must not put the busy UI back.
+    applyUpdate(state);
   }
   await analyzeScrollAreas(tab.id);
   updatePrimaryCtaLabel();

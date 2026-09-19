@@ -67,31 +67,45 @@ export interface GetStateMessage {
 
 export type InboundMessage = StartCaptureMessage | CancelMessage | GetStateMessage;
 
-export interface ProgressMessage {
+/**
+ * Identifies the capture a lifecycle message belongs to.
+ *
+ * `chrome.runtime.sendMessage` gives no ordering guarantee between separate
+ * calls, so a PROGRESS sent moments before a capture failed can be delivered
+ * after the ERROR that ended it — putting "Processing…", a progress bar and
+ * Cancel back on screen underneath "Capture failed". Tagging each message
+ * with its capture lets the popup recognise an update from a capture that has
+ * already finished and drop it, instead of trusting arrival order.
+ */
+export interface CaptureSession {
+  sessionId?: string;
+}
+
+export interface ProgressMessage extends CaptureSession {
   type: "PROGRESS";
   text: string;
   current?: number;
   total?: number;
 }
 
-export interface DoneMessage {
+export interface DoneMessage extends CaptureSession {
   type: "DONE";
   resultId: string;
   width: number;
   height: number;
 }
 
-export interface CancelledMessage {
+export interface CancelledMessage extends CaptureSession {
   type: "CANCELLED";
 }
 
-export interface ErrorMessage {
+export interface ErrorMessage extends CaptureSession {
   type: "ERROR";
   /** Raw technical message — the popup maps this to friendly copy for display and logs the raw text to console. */
   message: string;
 }
 
-export interface NoContainerSelectedMessage {
+export interface NoContainerSelectedMessage extends CaptureSession {
   type: "NO_CONTAINER_SELECTED";
 }
 
@@ -106,7 +120,7 @@ export interface StartedMessage {
 }
 
 /** Reply to GetStateMessage: whether a capture is active right now, and its last known progress. */
-export interface StateMessage {
+export interface StateMessage extends CaptureSession {
   type: "STATE";
   active: boolean;
   mode?: CaptureMode;
