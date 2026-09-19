@@ -223,3 +223,167 @@ pub fn page_count(pdf: &[u8]) -> usize {
     let text = String::from_utf8_lossy(pdf);
     text.matches("/Type /Page").count() - text.matches("/Type /Pages").count()
 }
+
+/// One link annotation, read back out of the finished file the way a reader
+/// reaches it: page tree → page → `/Annots` → annotation object.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkAnnotation {
+    /// Index of the page whose `/Annots` array holds it.
+    pub page: usize,
+    pub rect: [f32; 4],
+    pub uri: String,
+    pub subtype: String,
+    pub has_uri_action: bool,
+}
+
+impl LinkAnnotation {
+    pub fn width(&self) -> f32 {
+        self.rect[2] - self.rect[0]
+    }
+    pub fn height(&self) -> f32 {
+        self.rect[3] - self.rect[1]
+    }
+}
+
+/// Every `N 0 obj … endobj` body in the file, by object number.
+fn objects(pdf: &[u8]) -> HashMap<u32, String> {
+    let text = String::from_utf8_lossy(pdf).into_owned();
+    let mut out = HashMap::new();
+    let bytes = text.as_bytes();
+    let mut i = 0usize;
+    while let Some(rel) = text[i..].find(" 0 obj") {
+        let at = i + rel;
+        // Walk back over the object number.
+        let mut start = at;
+        while start > 0 && bytes[start - 1].is_ascii_digit() {
+            start -= 1;
+        }
+        let Ok(number) = text[start..at].parse::<u32>() else {
+            i = at + 6;
+            continue;
+        };
+        let body_start = at + " 0 obj".len();
+        let end = match text[body_start..].find("endobj") {
+            Some(e) => body_start + e,
+            None => break,
+        };
+        out.insert(number, text[body_start..end].to_string());
+        i = end;
+    }
+    out
+}
+
+/// Object numbers in `/Kids`, i.e. the pages in the order the reader shows
+/// them.
+fn page_order(objects: &HashMap<u32, String>) -> Vec<u32> {
+    let Some(tree) = objects.values().find(|b| b.contains("/Type /Pages")) else {
+        return Vec::new();
+    };
+    let Some(start) = tree.find("/Kids") else {
+        return Vec::new();
+    };
+    let slice = &tree[start..];
+    let Some(open) = slice.find('[') else {
+        return Vec::new();
+    };
+    let Some(close) = slice[open..].find(']') else {
+        return Vec::new();
+    };
+    refs_in(&slice[open + 1..open + close])
+}
+
+fn refs_in(list: &str) -> Vec<u32> {
+    let mut out = Vec::new();
+    for chunk in list.split(" R") {
+        let token = chunk.trim();
+        if let Some(number) = token.split_whitespace().next() {
+            if let Ok(n) = number.parse::<u32>() {
+                out.push(n);
+            }
+        }
+    }
+    out
+}
+
+fn numbers_in_array(body: &str, key: &str) -> Option<Vec<f32>> {
+    let start = body.find(key)?;
+    let slice = &body[start + key.len()..];
+    let open = slice.find('[')?;
+    let close = slice[open..].find(']')?;
+    slice[open + 1..open + close]
+        .split_whitespace()
+        .map(|n| n.parse::<f32>().ok())
+        .collect()
+}
+
+fn name_after(body: &str, key: &str) -> Option<String> {
+    let start = body.find(key)?;
+    let rest = &body[start + key.len()..];
+    let rest = rest.trim_start();
+    let rest = rest.strip_prefix('/')?;
+    Some(
+        rest.chars()
+            .take_while(|c| c.is_ascii_alphanumeric())
+            .collect(),
+    )
+}
+
+/// Reads every link annotation out of the final PDF, resolved through the
+/// page tree so the reported page index is the one a reader would show it on.
+pub fn link_annotations(pdf: &[u8]) -> Vec<LinkAnnotation> {
+    let objects = objects(pdf);
+    let mut out = Vec::new();
+    for (page_index, page_number) in page_order(&objects).into_iter().enumerate() {
+        let Some(page_body) = objects.get(&page_number) else {
+            continue;
+        };
+        let Some(annots_at) = page_body.find("/Annots") else {
+            continue;
+        };
+        let slice = &page_body[annots_at..];
+        let (Some(open),) = (slice.find('['),) else {
+            continue;
+        };
+        let Some(close) = slice[open..].find(']') else {
+            continue;
+        };
+        for annot_number in refs_in(&slice[open + 1..open + close]) {
+            let Some(body) = objects.get(&annot_number) else {
+                continue;
+            };
+            let subtype = name_after(body, "/Subtype").unwrap_or_default();
+            let rect = numbers_in_array(body, "/Rect").unwrap_or_default();
+            let uri = body
+                .find("/URI (")
+                .and_then(|at| {
+                    let rest = &body[at + "/URI (".len()..];
+                    rest.find(')').map(|end| rest[..end].to_string())
+                })
+                .unwrap_or_default();
+            out.push(LinkAnnotation {
+                page: page_index,
+                rect: [
+                    rect.first().copied().unwrap_or(f32::NAN),
+                    rect.get(1).copied().unwrap_or(f32::NAN),
+                    rect.get(2).copied().unwrap_or(f32::NAN),
+                    rect.get(3).copied().unwrap_or(f32::NAN),
+                ],
+                uri,
+                subtype,
+                has_uri_action: body.contains("/S /URI"),
+            });
+        }
+    }
+    out
+}
+
+/// Each page's `/MediaBox`, in page-tree order.
+pub fn media_boxes(pdf: &[u8]) -> Vec<[f32; 4]> {
+    let objects = objects(pdf);
+    page_order(&objects)
+        .into_iter()
+        .filter_map(|n| objects.get(&n))
+        .filter_map(|body| numbers_in_array(body, "/MediaBox"))
+        .map(|v| [v[0], v[1], v[2], v[3]])
+        .collect()
+}

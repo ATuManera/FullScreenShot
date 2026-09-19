@@ -66,7 +66,15 @@ export interface ExtractedTextLayer {
  */
 export type TextLayerMode = "page" | "container";
 
-/** Only these ever become clickable annotations; see the Rust side, which re-checks. */
+/**
+ * Only these ever become clickable annotations; the Rust side re-checks.
+ *
+ * `extractTextLayer` inlines an identical copy rather than calling this, and
+ * it has to: the injected function is re-evaluated in the page with no module
+ * scope, so a call to a module-level helper is a `ReferenceError` there and
+ * nowhere else. This copy is the unit-tested one; `injectableSelfContainment`
+ * keeps the two from drifting by refusing any module-scope reference at all.
+ */
 export function isSupportedLinkUri(uri: string): boolean {
   const trimmed = uri.trim();
   if (trimmed.length === 0 || trimmed.length > 2048) return false;
@@ -389,7 +397,16 @@ export function extractTextLayer(
 
     if (el.tagName === "A") {
       const href = (el as HTMLAnchorElement).href;
-      if (isSupportedLinkUri(href)) {
+      // Inlined from `isSupportedLinkUri` — see its doc comment. This
+      // function is re-evaluated inside the page, where the module this
+      // file compiles to does not exist.
+      const candidate = href.trim();
+      const lowered = candidate.toLowerCase();
+      const supported =
+        candidate.length > 0 &&
+        candidate.length <= 2048 &&
+        (lowered.startsWith("http://") || lowered.startsWith("https://"));
+      if (supported) {
         const boxes = el.getClientRects();
         for (let i = 0; i < boxes.length; i++) {
           const box = boxes[i];
