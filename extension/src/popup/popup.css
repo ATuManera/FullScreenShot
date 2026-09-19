@@ -487,13 +487,20 @@ section {
   border-top: 1px solid var(--border);
 }
 
+/* Buttons now, not links: Settings and About are views of this window. */
 .footer-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
   color: var(--muted);
   text-decoration: none;
   font-size: 12px;
+  transition: color var(--transition-fast);
 }
 
 .footer-link:hover {
@@ -504,4 +511,70 @@ section {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: 6px;
+}
+
+/* About view */
+
+.about-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0 8px;
+}
+
+.about-icon {
+  border-radius: 8px;
+}
+
+.about-name {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.about-facts {
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.about-facts li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* A check rather than a bullet: each line is a guarantee, not an item. */
+.about-facts li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  width: 4px;
+  height: 7px;
+  border: solid var(--success);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.about-list {
+  margin: 8px 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+.about-list dt {
+  color: var(--muted);
+}
+
+.about-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }

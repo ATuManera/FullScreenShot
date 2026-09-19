@@ -8,6 +8,8 @@ import { type CaptureMode, type ExportFormat, type InboundMessage, type Markdown
 import { mapBrowserError, type FriendlyError } from "./errors.js";
 import { DEFAULT_PREFERENCES, loadPreferences, savePreferences, type LazyModePreference } from "./preferences.js";
 import { describesAFinishedCapture, progressStateForMessage, type ProgressRelevantMessage, type ProgressUiState } from "./progressView.js";
+import { ALL_VIEWS, DEFAULT_VIEW, isViewVisible, navigate, type PopupView } from "./popupView.js";
+import { browser } from "../browser/index.js";
 
 const PROTECTED_PAGE: FriendlyError = {
   title: "Capture unavailable on this page",
@@ -23,8 +25,13 @@ const errorNotice = document.getElementById("error-notice") as HTMLDivElement;
 const errorTitle = document.getElementById("error-title") as HTMLParagraphElement;
 const errorBody = document.getElementById("error-body") as HTMLParagraphElement;
 
-const viewMain = document.getElementById("view-main") as HTMLElement;
-const viewMarkdown = document.getElementById("view-markdown") as HTMLElement;
+const viewContainers: Record<PopupView, HTMLElement> = {
+  main: document.getElementById("view-main") as HTMLElement,
+  markdown: document.getElementById("view-markdown") as HTMLElement,
+  settings: document.getElementById("view-settings") as HTMLElement,
+  about: document.getElementById("view-about") as HTMLElement,
+};
+const viewMain = viewContainers.main;
 
 const scrollareaCard = document.getElementById("scrollarea-card") as HTMLLabelElement;
 const scrollareaTitle = document.getElementById("scrollarea-title") as HTMLSpanElement;
@@ -44,6 +51,14 @@ const markdownBack = document.getElementById("markdown-back") as HTMLButtonEleme
 const markdownExportBtn = document.getElementById("markdown-export-btn") as HTMLButtonElement;
 const markdownModeHint = document.getElementById("markdown-mode-hint") as HTMLParagraphElement;
 
+const settingsLink = document.getElementById("settings-link") as HTMLButtonElement;
+const settingsBack = document.getElementById("settings-back") as HTMLButtonElement;
+const settingsDone = document.getElementById("settings-done") as HTMLButtonElement;
+const lazyModeHint = document.getElementById("lazy-mode-hint") as HTMLParagraphElement;
+const aboutLink = document.getElementById("about-link") as HTMLButtonElement;
+const aboutBack = document.getElementById("about-back") as HTMLButtonElement;
+const aboutVersion = document.getElementById("about-version") as HTMLParagraphElement;
+
 function captureModeRadios(): HTMLInputElement[] {
   return Array.from(document.querySelectorAll('input[name="capture-mode"]'));
 }
@@ -58,6 +73,9 @@ function pdfOrientationRadios(): HTMLInputElement[] {
 }
 function markdownModeRadios(): HTMLInputElement[] {
   return Array.from(document.querySelectorAll('input[name="markdown-mode"]'));
+}
+function lazyModeRadios(): HTMLInputElement[] {
+  return Array.from(document.querySelectorAll('input[name="lazy-mode"]'));
 }
 
 function checkedValue(radios: HTMLInputElement[]): string | undefined {
@@ -102,8 +120,9 @@ function showRestricted(friendly: FriendlyError): void {
   restrictedTitle.textContent = friendly.title;
   restrictedBody.textContent = friendly.body;
   restrictedNotice.hidden = false;
-  viewMain.hidden = true;
-  viewMarkdown.hidden = true;
+  for (const view of ALL_VIEWS) {
+    viewContainers[view].hidden = true;
+  }
   markdownEntry.hidden = true;
 }
 
@@ -197,6 +216,8 @@ let lazyMode: LazyModePreference = DEFAULT_PREFERENCES.lazyMode;
 async function applyStoredPreferences(): Promise<void> {
   const prefs = await loadPreferences();
   lazyMode = prefs.lazyMode;
+  setChecked(lazyModeRadios(), prefs.lazyMode);
+  updateLazyModeHint();
   setChecked(exportFormatRadios(), prefs.exportFormat);
   setChecked(pdfPageSizeRadios(), prefs.pdfPageSize);
   setChecked(pdfOrientationRadios(), prefs.pdfOrientation);
@@ -235,15 +256,56 @@ markdownModeRadios().forEach((r) =>
 );
 captureModeRadios().forEach((r) => r.addEventListener("change", updatePrimaryCtaLabel));
 
-// --- Markdown subview toggle -----------------------------------------------
-markdownEntry.addEventListener("click", () => {
-  viewMain.hidden = true;
-  viewMarkdown.hidden = false;
-});
-markdownBack.addEventListener("click", () => {
-  viewMarkdown.hidden = true;
-  viewMain.hidden = false;
-});
+// --- View navigation -------------------------------------------------------
+// Settings and About are views of this window, not a page in a tab. Only the
+// capture flow needs a whole tab of its own, and only for the result.
+let currentView: PopupView = DEFAULT_VIEW;
+
+function renderView(): void {
+  for (const view of ALL_VIEWS) {
+    viewContainers[view].hidden = !isViewVisible(view, currentView);
+  }
+}
+
+function goTo(view: PopupView): void {
+  currentView = navigate(currentView, { kind: "open", view });
+  renderView();
+}
+
+function goBack(): void {
+  currentView = navigate(currentView, { kind: "back" });
+  renderView();
+}
+
+markdownEntry.addEventListener("click", () => goTo("markdown"));
+markdownBack.addEventListener("click", goBack);
+settingsLink.addEventListener("click", () => goTo("settings"));
+settingsBack.addEventListener("click", goBack);
+settingsDone.addEventListener("click", goBack);
+aboutLink.addEventListener("click", () => goTo("about"));
+aboutBack.addEventListener("click", goBack);
+
+// --- Settings ---------------------------------------------------------------
+function updateLazyModeHint(): void {
+  lazyModeHint.textContent = lazyMode === "reliable" ? "Load lazy content before capture." : "Capture immediately.";
+}
+
+lazyModeRadios().forEach((r) =>
+  r.addEventListener("change", () => {
+    const value = checkedValue(lazyModeRadios());
+    if (value !== "fast" && value !== "reliable") {
+      return;
+    }
+    // Saved as chosen, in the same store the options page used, and held here
+    // too so a capture started straight afterwards uses the new setting
+    // rather than the one this popup loaded.
+    lazyMode = value;
+    updateLazyModeHint();
+    void savePreferences({ lazyMode: value });
+  }),
+);
+
+aboutVersion.textContent = `Version ${browser.getManifestVersion()}`;
 
 // --- Transport --------------------------------------------------------
 // Discrete commands go through `chrome.runtime.sendMessage`, not a

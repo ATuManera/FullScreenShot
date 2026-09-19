@@ -123,22 +123,76 @@
     <button type="button" class="primary-cta" id="markdown-export-btn">Export .md</button>
   </main>
 
+  <main id="view-settings" hidden>
+    <button type="button" class="back-btn" id="settings-back" aria-label="Back to capture">
+      <span aria-hidden="true">‹</span> Back
+    </button>
+    <h2 class="view-title">Settings</h2>
+
+    <section aria-labelledby="lazy-mode-heading">
+      <h3 class="section-label" id="lazy-mode-heading">Full-page loading</h3>
+      <div class="segmented" role="radiogroup" aria-labelledby="lazy-mode-heading">
+        <label class="segmented-option">
+          <input type="radio" name="lazy-mode" value="fast" checked />
+          <span>Fast</span>
+        </label>
+        <label class="segmented-option">
+          <input type="radio" name="lazy-mode" value="reliable" />
+          <span>Reliable</span>
+        </label>
+      </div>
+      <p class="muted" id="lazy-mode-hint">Capture immediately.</p>
+    </section>
+
+    <button type="button" class="primary-cta" id="settings-done">Done</button>
+  </main>
+
+  <main id="view-about" hidden>
+    <button type="button" class="back-btn" id="about-back" aria-label="Back to capture">
+      <span aria-hidden="true">‹</span> Back
+    </button>
+    <h2 class="view-title">About</h2>
+
+    <div class="about-hero">
+      <img class="about-icon" src="../icons/icon-48.png" width="48" height="48" alt="" />
+      <p class="about-name">FullScreenShot</p>
+      <p class="muted" id="about-version">Version …</p>
+    </div>
+
+    <p class="muted">Capture full web pages locally in your browser.</p>
+
+    <ul class="about-facts">
+      <li>100% local processing</li>
+      <li>No telemetry</li>
+      <li>No cloud upload</li>
+    </ul>
+
+    <dl class="about-list">
+      <dt>License</dt>
+      <dd>MPL-2.0-no-copyleft-exception</dd>
+      <dt>Project</dt>
+      <dd>ATuManera</dd>
+      <dt>Author</dt>
+      <dd>Fernando Gallarday</dd>
+    </dl>
+  </main>
+
   <footer class="footer">
-    <a class="footer-link" id="settings-link" href="../options/options.html#settings" target="_blank" rel="noopener">
+    <button type="button" class="footer-link" id="settings-link">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <circle cx="12" cy="12" r="3"></circle>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
       </svg>
       Settings
-    </a>
-    <a class="footer-link" id="about-link" href="../options/options.html#about" target="_blank" rel="noopener">
+    </button>
+    <button type="button" class="footer-link" id="about-link">
       About
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <circle cx="12" cy="12" r="10"></circle>
         <line x1="12" y1="16" x2="12" y2="12"></line>
         <line x1="12" y1="8" x2="12.01" y2="8"></line>
       </svg>
-    </a>
+    </button>
   </footer>
 
   <script type="module" src="popup.js"></script>
