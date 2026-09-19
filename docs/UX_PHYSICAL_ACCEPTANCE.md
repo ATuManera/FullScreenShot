@@ -365,14 +365,39 @@ fractional device pixel ratio) as well as the default.
 - [ ] H10. There is no longer an "Extension options" entry in the extension's
       own menu on `chrome://extensions` — Settings lives only in the popup.
 
+### Gate R — the one re-check after the link repair
+
+Links were not clickable because the injected text extractor referenced a
+helper from its own module, which does not exist in the page it is
+re-evaluated in. The first `<a>` on any page threw, so the extension emitted
+a PDF with no links — and no text layer either. That is fixed, and link
+clicking is now machine-verified in Chrome's PDF viewer on the generated
+file; what is not verified is the extension actually running in your Chrome.
+
+Do this first. If R3 passes, the repair holds and the rest of Gate P is a
+re-confirmation rather than an investigation.
+
+- [ ] R1. `cargo xtask build`, reload the unpacked extension, and capture
+      `tests/pages/pdf-text-acceptance.html` → Full page → PDF → A4.
+- [ ] R2. The result page says **"PDF · A4 · Portrait · Searchable text"**.
+      If it does not, the text layer is still not being produced — stop and
+      report it, because links and text now fail and succeed together.
+- [ ] R3. Open the PDF in Chrome and click **"documento de origen"**.
+      Expected: it opens `https://example.com/principio`.
+- [ ] R4. Open the service-worker console (`chrome://extensions` →
+      FullScreenShot → "service worker") and confirm it logged a line like
+      `PDF text layer: 49 fragments, 5 links, … ms` — and **no** warning
+      about extraction having failed.
+
 ### Gate P — the PDF is a document, not just a picture
 
 Automated checks proved the text layer with poppler, qpdf and PDFium
-separately. What could **not** be automated is the thing that actually
-matters to a reader: searching, selecting, copying and clicking inside a
-real PDF viewer. Chrome's PDF viewer exposes neither its find bar nor its
-accessibility tree to automation, so every item below is unverified until
-you run it.
+separately, and every link in the generated PDF is now clicked by machine in
+Chrome's own viewer. What still cannot be automated is searching, selecting
+and copying inside that viewer: the plugin exposes neither its find bar nor
+its accessibility tree. Those items below remain unverified until you run
+them; the link items (P9-P12) are a confirmation that the extension's own
+output behaves like the file the tests exercise.
 
 Use `tests/pages/pdf-text-acceptance.html` (open it from disk) unless an
 item says otherwise.
