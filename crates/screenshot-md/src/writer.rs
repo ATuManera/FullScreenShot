@@ -28,10 +28,29 @@ pub fn write_frontmatter(meta: &DocumentMeta) -> String {
     )
 }
 
+/// Renders the document, with exactly one blank line between blocks.
+///
+/// Separation is applied here rather than left to each renderer, because the
+/// renderers disagreed: a paragraph ended with one newline and a list or a
+/// table with two, so the same document came out with uneven gaps depending
+/// on what it contained. Trimming each block's own trailing newlines and
+/// joining with a blank line makes the spacing a property of the document
+/// instead of a property of the last node type.
+///
+/// Only *trailing* newlines are trimmed, so the blank lines inside a fenced
+/// code block — where they are content — survive untouched.
 pub fn write_markdown(doc: &Document) -> String {
-    let mut out = String::new();
+    let mut blocks: Vec<String> = Vec::with_capacity(doc.children.len());
     for node in &doc.children {
-        render_node(node, &mut out);
+        let mut rendered = String::new();
+        render_node(node, &mut rendered);
+        let trimmed = rendered.trim_end_matches('\n');
+        if !trimmed.is_empty() {
+            blocks.push(trimmed.to_string());
+        }
+    }
+    let mut out = blocks.join("\n\n");
+    if !out.is_empty() {
         out.push('\n');
     }
     out
@@ -55,6 +74,46 @@ fn render_children_to_string(children: &[Node]) -> String {
     out
 }
 
+/// Makes rendered inline content safe to stand as a Markdown block.
+///
+/// Four leading spaces on a line is an indented code block in CommonMark, and
+/// a page's own HTML source indentation reaches the AST inside text nodes —
+/// so without this, an ordinary paragraph written as
+///
+/// ```html
+/// <p>
+///     Este párrafo abre el documento
+/// </p>
+/// ```
+///
+/// exports as a code block containing prose. The in-page extractor already
+/// collapses that whitespace the way CSS does, but this is the structural
+/// guarantee: whatever a page manages to put in a text node, a block that is
+/// meant to be prose comes out as prose.
+///
+/// Leading whitespace carries no meaning inside a Markdown block, so it goes.
+/// Trailing whitespace does — two spaces is a hard break — which is exactly
+/// why page indentation must not be allowed to fabricate one. Blank lines at
+/// the block's ends go too; the writer adds its own separation.
+///
+/// Not applied to code blocks, whose whitespace is the content.
+fn tidy_block_text(text: &str) -> String {
+    let mut lines: Vec<&str> = text.lines().map(str::trim).collect();
+    while lines.first().is_some_and(|l| l.is_empty()) {
+        lines.remove(0);
+    }
+    while lines.last().is_some_and(|l| l.is_empty()) {
+        lines.pop();
+    }
+    lines.join("\n")
+}
+
+/// The same, for a table cell, where a newline would end the row and shear
+/// the table in half.
+fn tidy_cell_text(text: &str) -> String {
+    tidy_block_text(text).replace('\n', " ")
+}
+
 /// Escapes characters that would otherwise be misread as Markdown syntax
 /// in plain page text (not applied inside code spans/blocks).
 fn escape_text(text: &str) -> String {
@@ -76,10 +135,15 @@ fn render_list(items: &[Node], ordered: bool, out: &mut String) {
             "- ".to_string()
         };
         out.push_str(&prefix);
-        match item {
-            Node::ListItem(children) => render_children(children, out),
-            other => render_node(other, out),
-        }
+        let rendered = match item {
+            Node::ListItem(children) => render_children_to_string(children),
+            other => {
+                let mut s = String::new();
+                render_node(other, &mut s);
+                s
+            }
+        };
+        out.push_str(&tidy_block_text(&rendered));
         out.push('\n');
     }
     out.push('\n');
@@ -91,13 +155,16 @@ fn render_table(rows: &[Node], out: &mut String) {
         .map(|row| match row {
             Node::TableRow(cells) => cells
                 .iter()
-                .map(|cell| match cell {
-                    Node::TableCell(children) => render_children_to_string(children),
-                    other => {
-                        let mut s = String::new();
-                        render_node(other, &mut s);
-                        s
-                    }
+                .map(|cell| {
+                    let rendered = match cell {
+                        Node::TableCell(children) => render_children_to_string(children),
+                        other => {
+                            let mut s = String::new();
+                            render_node(other, &mut s);
+                            s
+                        }
+                    };
+                    tidy_cell_text(&rendered)
                 })
                 .collect(),
             _ => Vec::new(),
@@ -127,11 +194,13 @@ fn render_node(node: &Node, out: &mut String) {
         Node::Heading { level, children } => {
             out.push_str(&"#".repeat((*level).clamp(1, 6) as usize));
             out.push(' ');
-            render_children(children, out);
+            // A heading is one line by definition: a newline inside it would
+            // silently end the heading and leave the rest as loose prose.
+            out.push_str(&tidy_cell_text(&render_children_to_string(children)));
             out.push('\n');
         }
         Node::Paragraph(children) => {
-            render_children(children, out);
+            out.push_str(&tidy_block_text(&render_children_to_string(children)));
             out.push('\n');
         }
         Node::Text(text) => out.push_str(&escape_text(text)),
@@ -182,7 +251,7 @@ fn render_node(node: &Node, out: &mut String) {
         Node::Table { rows } => render_table(rows, out),
         Node::TableRow(children) | Node::TableCell(children) => render_children(children, out),
         Node::BlockQuote(children) => {
-            let inner = render_children_to_string(children);
+            let inner = tidy_block_text(&render_children_to_string(children));
             for line in inner.lines() {
                 out.push_str("> ");
                 out.push_str(line);
@@ -200,6 +269,175 @@ fn render_node(node: &Node, out: &mut String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- Block hygiene ----------------------------------------------------
+    //
+    // A page's own HTML source indentation arrives inside text nodes. In
+    // Markdown, four leading spaces is a code block — so without these the
+    // exported file turns ordinary prose into code, which is what the owner
+    // found when they read one.
+
+    #[test]
+    fn source_indentation_never_becomes_a_code_block() {
+        let doc = Document {
+            children: vec![Node::Paragraph(vec![Node::Text(
+                "\n    Este párrafo abre el documento\n    y sigue en la línea siguiente.\n  "
+                    .to_string(),
+            )])],
+        };
+        let md = write_markdown(&doc);
+        for line in md.lines() {
+            assert!(
+                !line.starts_with("    "),
+                "indented line survived: {line:?}"
+            );
+        }
+        assert!(md.contains("Este párrafo abre el documento"));
+        assert!(md.contains("y sigue en la línea siguiente."));
+    }
+
+    #[test]
+    fn a_heading_stays_on_one_line() {
+        let doc = Document {
+            children: vec![Node::Heading {
+                level: 1,
+                children: vec![Node::Text("\n  Información\n  de auditoría\n".to_string())],
+            }],
+        };
+        // A newline inside a heading would end it and leave the rest as loose
+        // prose under a half-written title.
+        assert_eq!(write_markdown(&doc), "# Información de auditoría\n");
+    }
+
+    #[test]
+    fn a_table_cell_cannot_break_its_row() {
+        let doc = Document {
+            children: vec![Node::Table {
+                rows: vec![
+                    Node::TableRow(vec![
+                        Node::TableCell(vec![Node::Text("Name".to_string())]),
+                        Node::TableCell(vec![Node::Text("Value".to_string())]),
+                    ]),
+                    Node::TableRow(vec![
+                        Node::TableCell(vec![Node::Text("Alpha\n  second line".to_string())]),
+                        Node::TableCell(vec![Node::Text("  1  ".to_string())]),
+                    ]),
+                ],
+            }],
+        };
+        let md = write_markdown(&doc);
+        assert!(md.contains("| Alpha second line | 1 |"), "{md}");
+        assert_eq!(md.lines().filter(|l| l.starts_with('|')).count(), 3);
+    }
+
+    #[test]
+    fn an_unrendered_cell_keeps_its_column() {
+        // The extractor emits an empty cell rather than dropping one, so the
+        // columns after it do not shift left by one.
+        let doc = Document {
+            children: vec![Node::Table {
+                rows: vec![
+                    Node::TableRow(vec![
+                        Node::TableCell(vec![Node::Text("Visible".to_string())]),
+                        Node::TableCell(vec![Node::Text("Hidden".to_string())]),
+                    ]),
+                    Node::TableRow(vec![
+                        Node::TableCell(vec![Node::Text("kept".to_string())]),
+                        Node::TableCell(vec![]),
+                    ]),
+                ],
+            }],
+        };
+        assert!(write_markdown(&doc).contains("| kept |  |"));
+    }
+
+    #[test]
+    fn a_list_item_is_not_indented_by_the_pages_source() {
+        let doc = Document {
+            children: vec![Node::UnorderedList(vec![Node::ListItem(vec![
+                Node::Paragraph(vec![Node::Text("\n      First item\n    ".to_string())]),
+            ])])],
+        };
+        assert_eq!(write_markdown(&doc), "- First item\n");
+    }
+
+    #[test]
+    fn code_block_whitespace_is_content_and_survives_untouched() {
+        let doc = Document {
+            children: vec![Node::CodeBlock {
+                lang: Some("rust".to_string()),
+                code: "fn outer() {\n    let indented = 1;\n\n        let deeper = 2;\n}"
+                    .to_string(),
+            }],
+        };
+        let md = write_markdown(&doc);
+        assert!(
+            md.contains("fn outer() {\n    let indented = 1;\n\n        let deeper = 2;\n}"),
+            "a code block's own indentation and blank lines are its content: {md}"
+        );
+    }
+
+    #[test]
+    fn blocks_are_separated_by_exactly_one_blank_line_whatever_they_are() {
+        // The renderers used to disagree — a paragraph ended with one newline
+        // and a list or table with two — so the gaps depended on what the
+        // page happened to contain.
+        let doc = Document {
+            children: vec![
+                Node::Paragraph(vec![Node::Text("first".to_string())]),
+                Node::UnorderedList(vec![Node::ListItem(vec![Node::Paragraph(vec![
+                    Node::Text("item".to_string()),
+                ])])]),
+                Node::Paragraph(vec![Node::Text("after the list".to_string())]),
+                Node::Table {
+                    rows: vec![Node::TableRow(vec![Node::TableCell(vec![Node::Text(
+                        "cell".to_string(),
+                    )])])],
+                },
+                Node::Paragraph(vec![Node::Text("last".to_string())]),
+            ],
+        };
+        let md = write_markdown(&doc);
+        assert!(!md.contains("\n\n\n"), "excessive blank lines:\n{md}");
+        assert!(
+            md.ends_with("last\n"),
+            "the file must not end in blank lines: {md:?}"
+        );
+    }
+
+    #[test]
+    fn an_empty_block_contributes_nothing() {
+        let doc = Document {
+            children: vec![
+                Node::Paragraph(vec![Node::Text("kept".to_string())]),
+                Node::Paragraph(vec![]),
+                Node::Paragraph(vec![Node::Text("also kept".to_string())]),
+            ],
+        };
+        assert_eq!(write_markdown(&doc), "kept\n\nalso kept\n");
+    }
+
+    #[test]
+    fn no_rendered_line_carries_trailing_whitespace() {
+        let doc = Document {
+            children: vec![Node::Paragraph(vec![Node::Text(
+                "trailing spaces follow   \nand here too  ".to_string(),
+            )])],
+        };
+        for line in write_markdown(&doc).lines() {
+            assert_eq!(line, line.trim_end(), "trailing whitespace: {line:?}");
+        }
+    }
+
+    #[test]
+    fn a_blockquote_is_not_indented_into_code() {
+        let doc = Document {
+            children: vec![Node::BlockQuote(vec![Node::Paragraph(vec![Node::Text(
+                "\n    A quoted paragraph.\n  ".to_string(),
+            )])])],
+        };
+        assert_eq!(write_markdown(&doc), "> A quoted paragraph.\n");
+    }
 
     #[test]
     fn renders_heading_and_paragraph() {
