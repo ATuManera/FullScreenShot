@@ -54,3 +54,18 @@ test("a selected message missing its selector is rejected rather than half-appli
 test("an unknown status is rejected", () => {
   assert.equal(parseSelectionMessage({ type: SELECTION_MESSAGE_TYPE, requestId: REQ, status: "maybe" }, REQ), null);
 });
+
+test("a page with nothing to pick is its own outcome, not a cancellation", () => {
+  // Backing out and finding nothing to back out of read the same to the user
+  // otherwise: one is a decision, the other is the page having changed.
+  assert.deepEqual(
+    parseSelectionMessage({ type: SELECTION_MESSAGE_TYPE, requestId: REQ, status: "no-candidates" }, REQ),
+    { status: "no-candidates" },
+  );
+});
+
+test("the three terminal outcomes stay distinguishable across the boundary", () => {
+  const statuses = ["cancelled", "no-candidates", "error"];
+  const parsed = statuses.map((status) => parseSelectionMessage({ type: SELECTION_MESSAGE_TYPE, requestId: REQ, status, message: "x" }, REQ));
+  assert.deepEqual(parsed.map((p) => p.status), statuses);
+});

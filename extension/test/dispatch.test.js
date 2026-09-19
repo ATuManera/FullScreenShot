@@ -18,10 +18,15 @@ import { fileURLToPath } from "node:url";
 const CAPTURE_SENTINEL = "stub: capture reached captureVisibleTab";
 
 let onMessage;
+let messageListeners;
+/** Null makes the background fall through to the interactive picker. */
+let soleCandidate;
 let injected;
 let injectedCalls;
 let captureCalls;
 let broadcasts;
+let tabsCreated;
+let persistentCommandListener;
 /** Successive `scrollHeight` readings, to model a page that grows while pre-scrolling. */
 let measureHeights;
 
@@ -30,11 +35,15 @@ function makeChromeStub() {
   injectedCalls = [];
   captureCalls = 0;
   broadcasts = [];
+  tabsCreated = [];
   return {
     runtime: {
       onMessage: {
-        addListener: (fn) => { if (!onMessage) onMessage = fn; },
-        removeListener: () => {},
+        // Several listeners coexist here: the command listener registered at
+        // startup, and the short-lived one a pending scroll-area selection
+        // adds. Both must receive every message, as they do in the browser.
+        addListener: (fn) => { messageListeners.push(fn); if (!onMessage) onMessage = fn; },
+        removeListener: (fn) => { messageListeners = messageListeners.filter((l) => l !== fn); },
       },
       sendMessage: async (m) => { broadcasts.push(m); return undefined; },
       getManifest: () => ({ manifest_version: 3 }),
@@ -44,7 +53,7 @@ function makeChromeStub() {
     tabs: {
       query: async () => [{ id: 7, windowId: 1, url: "https://example.test/page", title: "Page" }],
       get: async () => ({ id: 7, windowId: 1, url: "https://example.test/page", title: "Page" }),
-      create: async () => ({ id: 8 }),
+      create: async (props) => { tabsCreated.push(props); return { id: 8 }; },
       captureVisibleTab: async () => { captureCalls += 1; throw new Error(CAPTURE_SENTINEL); },
       onRemoved: { addListener: () => {}, removeListener: () => {} },
     },
@@ -63,7 +72,9 @@ function makeChromeStub() {
           case "scrollWindowToVerified":
             return [{ result: { requestedY: args[0], actualY: args[0], maxScrollY: 3200 } }];
           case "selectSoleScrollCandidate":
-            return [{ result: { attr: "data-fullscreenshot-container-id", value: "sole" } }];
+            return [{ result: soleCandidate }];
+          case "runSelectionPicker":
+            return [{ result: 2 }];
           case "prepareContainerForCapture":
             return [{ result: { scrollHeight: 2000, clientWidth: 600, clientHeight: 400, originalScrollTop: 0, pageScrollX: 0, pageScrollY: 0, cropX: 10, cropY: 20, cropWidth: 600, visibleHeight: 400, devicePixelRatio: 1 } }];
           case "positionContainerBand":
@@ -110,8 +121,40 @@ async function settle() {
 }
 
 function resetStub() {
+  messageListeners = persistentCommandListener ? [persistentCommandListener] : [];
+  onMessage = persistentCommandListener;
   globalThis.chrome = makeChromeStub();
   measureHeights = null;
+  soleCandidate = { attr: "data-fullscreenshot-container-id", value: "sole" };
+}
+
+/** Delivers a message the way the browser does: to every registered listener. */
+function deliver(message) {
+  let response;
+  for (const listener of messageListeners) {
+    listener(message, {}, (r) => { response = r; });
+  }
+  return response;
+}
+
+function getState() {
+  let state;
+  onMessage({ type: "GET_STATE" }, {}, (r) => { state = r; });
+  return state;
+}
+
+/** The request id the page-side picker was handed, so a test can answer as it would. */
+function pendingSelectionRequestId() {
+  const call = injectedCalls.find((c) => c.name === "runSelectionPicker");
+  return call ? call.args[1] : null;
+}
+
+async function waitForPicker() {
+  for (let i = 0; i < 100; i++) {
+    if (pendingSelectionRequestId()) return true;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return false;
 }
 
 before(async () => {
@@ -128,6 +171,9 @@ before(async () => {
   resetStub();
   await import("../../dist/chromium/background/index.js");
   assert.ok(onMessage, "background did not register a runtime message listener");
+  // The module registers its command listener once, at import. Later stubs
+  // replace `chrome` but cannot re-run that registration, so keep it.
+  persistentCommandListener = onMessage;
 });
 
 test("Full Page scrolls the window and never runs scroll-area location", async () => {
@@ -287,4 +333,154 @@ test("Reliable stops a page that never stops growing, instead of scrolling forev
   assert.ok(failure, "expected the capture to end with an error");
   assert.match(failure.message, /infinite scroll/i);
   assert.equal(captureCalls, 0, "no tile should be captured from a page that never settles");
+});
+
+// --- Scroll-area selection reaches a terminal state on the user's action ---
+// The physical failure: Escape removed the picker from the page, but the
+// extension kept reporting a capture in progress, and only settled after a
+// delay — so reopening it showed a stale waiting state instead of a ready one.
+
+test("Escape ends the selection as a cancellation, not as a failure", async () => {
+  resetStub();
+  soleCandidate = null;
+  await start("scrollarea");
+  assert.ok(await waitForPicker(), "expected the interactive picker to be injected");
+
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  await settle();
+
+  assert.ok(broadcasts.some((m) => m.type === "CANCELLED"), "backing out must read as a cancellation");
+  assert.ok(
+    !broadcasts.some((m) => m.type === "NO_CONTAINER_SELECTED"),
+    "choosing not to pick is not the same as there being nothing to pick",
+  );
+});
+
+test("the page is told its terminal outcome was received, so it stops retrying", async () => {
+  resetStub();
+  soleCandidate = null;
+  await start("scrollarea");
+  await waitForPicker();
+
+  const ack = deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  assert.deepEqual(ack, { received: true });
+  await settle();
+});
+
+test("state is idle the moment a cancellation is acknowledged", async () => {
+  resetStub();
+  soleCandidate = null;
+  await start("scrollarea");
+  await waitForPicker();
+  assert.equal(getState().active, true, "a pending selection is an active capture");
+
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  await settle();
+
+  assert.equal(getState().active, false, "reopening must not find a capture still running");
+});
+
+test("a cancelled selection releases the capture guard immediately", async () => {
+  resetStub();
+  soleCandidate = null;
+  await start("scrollarea");
+  await waitForPicker();
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  await settle();
+
+  const ack = await start("visible");
+  assert.deepEqual(ack, { type: "STARTED" }, "the next capture must not be refused");
+  await settle();
+});
+
+test("cancelling produces no result and opens no result page", async () => {
+  resetStub();
+  soleCandidate = null;
+  await start("scrollarea");
+  await waitForPicker();
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  await settle();
+
+  assert.deepEqual(tabsCreated, [], "a cancelled capture has nothing to show");
+  assert.ok(!broadcasts.some((m) => m.type === "DONE"));
+});
+
+test("cancellation does not wait on the watchdog", async () => {
+  // The watchdog is minutes away; if it were doing the work here, this test
+  // could not finish.
+  resetStub();
+  soleCandidate = null;
+  await start("scrollarea");
+  await waitForPicker();
+
+  const startedAt = Date.now();
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  for (let i = 0; i < 200 && getState().active; i++) {
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert.equal(getState().active, false);
+  assert.ok(Date.now() - startedAt < 1000, `settled in ${Date.now() - startedAt}ms, which is not event-driven`);
+  await settle();
+});
+
+test("a page with nothing to pick is reported as such, not as a cancellation", async () => {
+  resetStub();
+  soleCandidate = null;
+  // The picker reports it found no candidates at all.
+  await start("scrollarea");
+  await waitForPicker();
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "no-candidates" });
+  await settle();
+
+  assert.ok(broadcasts.some((m) => m.type === "NO_CONTAINER_SELECTED"));
+  assert.ok(!broadcasts.some((m) => m.type === "CANCELLED"));
+});
+
+test("a message from an earlier selection cannot cancel the current one", async () => {
+  resetStub();
+  soleCandidate = null;
+  await start("scrollarea");
+  await waitForPicker();
+
+  const ack = deliver({ type: "SCROLL_AREA_SELECTION", requestId: "a-previous-selection", status: "cancelled" });
+  assert.equal(ack, undefined, "an unrelated message must not be acknowledged");
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(getState().active, true, "the live selection must survive a stale message");
+
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  await settle();
+  assert.equal(getState().active, false);
+});
+
+test("while waiting for a choice, state says so rather than something stale", async () => {
+  // What a reopened popup reconstructs from. It used to still read
+  // "Locating scroll area…" because the prompt went out as a bare broadcast.
+  resetStub();
+  soleCandidate = null;
+  await start("scrollarea");
+  await waitForPicker();
+
+  const state = getState();
+  assert.equal(state.active, true);
+  assert.match(state.progress.text, /choose a scroll area/i);
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  await settle();
+});
+
+test("a selection that picks a container still captures it", async () => {
+  resetStub();
+  soleCandidate = null;
+  await start("scrollarea");
+  await waitForPicker();
+  deliver({
+    type: "SCROLL_AREA_SELECTION",
+    requestId: pendingSelectionRequestId(),
+    status: "selected",
+    attr: "data-fullscreenshot-container-id",
+    value: "1",
+  });
+  await settle();
+
+  assert.ok(injected.includes("prepareContainerForCapture"), "expected the chosen container to be captured");
+  assert.ok(!broadcasts.some((m) => m.type === "CANCELLED"));
 });
