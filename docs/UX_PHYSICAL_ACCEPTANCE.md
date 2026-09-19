@@ -265,12 +265,23 @@ Open `http://127.0.0.1:8899/scrollarea-multiple.html`.
 - [ ] D6. Repeat and click the left-hand panel: the result contains ALPHA
       rows only.
 - [ ] D7. Repeat and press Escape instead: outlines disappear, no capture
-      starts, the popup returns to a ready state.
+      starts, and the popup returns to a ready state **immediately** — with
+      no red error notice. Escape is a choice, not a failure.
 - [ ] D8. Repeat and click empty page background instead: same as D7 — this
       must not hang.
+- [ ] D9. Repeat, press Escape, then reopen FullScreenShot **straight away**.
+      It must already be ready: no "Choose a scroll area…", no progress bar,
+      no Cancel, and no delay before it settles. This is the exact symptom
+      this pass was opened for.
+- [ ] D10. Repeat, press Escape, and start a different capture (Visible area)
+      immediately. It must be accepted, not refused as "Capture already
+      running".
+- [ ] D11. On a page with no scrollable region at all, the "No area selected"
+      notice is still the right answer and should still appear — that message
+      belongs to "there is nothing here to pick", not to Escape.
 - [ ] D9. Repeat and press Cancel in the popup while the picker is open:
       outlines disappear and the popup returns to ready.
-- [ ] D10. After every one of the above, the page has no leftover blue
+- [ ] D12. After every one of the above, the page has no leftover blue
       outlines and no leftover pointer cursor.
 
 ### Gate F — Fast vs Reliable full-page loading

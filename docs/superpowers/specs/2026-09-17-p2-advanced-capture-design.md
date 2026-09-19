@@ -47,6 +47,31 @@ dependencias (P5).
   vive en TypeScript (es una política de UX/timing, no geometría pura) pero
   la *detección* de "altura sigue creciendo" es una comparación numérica
   simple, testeable sin DOM.
+- **Revisado — cancelar no es fallar, y entregar no es asumir.** El desenlace
+  del picker se colapsaba a `selector | null` en `resolveResult`, de modo que
+  "el usuario decidió no elegir" y "no había nada que elegir" emitían ambos
+  `NO_CONTAINER_SELECTED`, que el popup muestra como error rojo. Es correcto
+  para una página sin regiones scrollables y equivocado para un Escape
+  deliberado. Los desenlaces quedan separados de extremo a extremo:
+  `cancelled` (Escape o clic fuera de todo candidato) → `CANCELLED`;
+  `no-candidates` (la página cambió entre el análisis y el picker) →
+  `NO_CONTAINER_SELECTED`; `error` → se propaga.
+- **Revisado — entrega confirmada del desenlace.** El mensaje terminal se
+  emitía con `chrome.runtime.sendMessage` sin esperar ni comprobar que
+  alguien lo recibiera. Si la entrega fallaba —sin receptor en ese instante,
+  worker reiniciándose, contexto de extensión invalidado— la página quedaba
+  limpia y el background seguía esperando, sin nada que cerrara la selección
+  salvo su watchdog de 90 s: una acción determinista del usuario degradada a
+  un timeout. Ahora el background responde `{ received: true }` y la página
+  reintenta unas pocas veces en bastante menos de un segundo si no llega ese
+  acuse. Un mensaje de otra selección se deja deliberadamente sin acusar,
+  para que un picker sobrante de una sesión anterior se detenga en vez de
+  reintentar contra una captura que no le corresponde.
+- **Revisado**: el aviso "Choose a scroll area on the page" viaja por
+  `onProgress` y no por un broadcast suelto, para que `GET_STATE` refleje que
+  se está esperando una elección; un popup reabierto a media selección
+  reconstruía "Locating scroll area…" desde un estado que nadie actualizaba.
+  El guard de captura se libera antes de emitir el mensaje terminal.
 - **Revisado**: la preferencia Fast/Reliable se persistía y se mostraba, pero
   no llegaba a la captura — `START_CAPTURE` no tenía campo para ella, el popup
   no la leía y el background llamaba a `captureFullPage(..., "fast", ...)`
@@ -145,3 +170,4 @@ discrepar.
 | 2026-09-17 | `52cfc50`         | Implementación completa de P2: Selected Scroll Area con selección interactiva verificada en Chromium real, modo Reliable de lazy-loading con detección de scroll infinito, límite de seguridad de tiles, lane de tests Node sin dependencias. |
 | 2026-09-18 | `02ad6b7`, `273172d` | Reparación de runtime de Selected Scroll Area: ciclo de vida de selección serializable y terminal (mensaje + desenlace único + limpieza del lado de la página), contenedor traído a la vista con banda visible real, y restauración completa de `scrollTop`, marcador y scroll de página. Verificado en Chromium real con `tests/pages/scrollarea-single.html` y `tests/pages/scrollarea-multiple.html`. |
 | 2026-09-18 | `98780c2` | Reliable mode cableado de extremo a extremo (`lazyMode` en el contrato `START_CAPTURE`, validado y propagado hasta `captureFullPage`) y reparación de la condición de parada del pre-scroll. Verificado en Chromium con `tests/pages/lazy-fullpage-acceptance.html`: Fast 1200x2100 con 3 secciones, Reliable 1200x4200 con 6. |
+| 2026-09-18 | `e121f5e`, `60862db` | Desenlaces terminales de la selección: Escape se reporta como cancelación y no como error, `no-candidates` se separa de `cancelled`, el desenlace se entrega con acuse y reintento acotado, y el estado autoritativo refleja la espera. Medido en Chromium: Escape → idle en 7 ms. |
