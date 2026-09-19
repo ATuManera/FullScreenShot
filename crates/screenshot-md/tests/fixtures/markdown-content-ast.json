@@ -1,0 +1,416 @@
+{
+ "children": [
+  {
+   "type": "Heading",
+   "value": {
+    "level": 1,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Markdown export fixture"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "This page exercises the "
+    },
+    {
+     "type": "Strong",
+     "value": [
+      {
+       "type": "Text",
+       "value": "DOM-to-Markdown"
+      }
+     ]
+    },
+    {
+     "type": "Text",
+     "value": " AST extraction and writer: "
+    },
+    {
+     "type": "Emphasis",
+     "value": [
+      {
+       "type": "Text",
+       "value": "emphasis"
+      }
+     ]
+    },
+    {
+     "type": "Text",
+     "value": ", a "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "https://example.com/",
+      "children": [
+       {
+        "type": "Text",
+        "value": "safe link"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": ", and a "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "javascript:alert(1)",
+      "children": [
+       {
+        "type": "Text",
+        "value": "dangerous link"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": " that must be sanitized."
+    }
+   ]
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "A list"
+     }
+    ]
+   }
+  },
+  {
+   "type": "UnorderedList",
+   "value": [
+    {
+     "type": "ListItem",
+     "value": [
+      {
+       "type": "Paragraph",
+       "value": [
+        {
+         "type": "Text",
+         "value": "First item"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "type": "ListItem",
+     "value": [
+      {
+       "type": "Paragraph",
+       "value": [
+        {
+         "type": "Text",
+         "value": "Second item"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "A table"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Table",
+   "value": {
+    "rows": [
+     {
+      "type": "TableRow",
+      "value": [
+       {
+        "type": "TableCell",
+        "value": [
+         {
+          "type": "Text",
+          "value": "Name"
+         }
+        ]
+       },
+       {
+        "type": "TableCell",
+        "value": [
+         {
+          "type": "Text",
+          "value": "Value"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "TableRow",
+      "value": [
+       {
+        "type": "TableCell",
+        "value": [
+         {
+          "type": "Text",
+          "value": "Alpha"
+         }
+        ]
+       },
+       {
+        "type": "TableCell",
+        "value": [
+         {
+          "type": "Text",
+          "value": "1"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "TableRow",
+      "value": [
+       {
+        "type": "TableCell",
+        "value": [
+         {
+          "type": "Text",
+          "value": "Beta"
+         }
+        ]
+       },
+       {
+        "type": "TableCell",
+        "value": [
+         {
+          "type": "Text",
+          "value": "2"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Code"
+     }
+    ]
+   }
+  },
+  {
+   "type": "CodeBlock",
+   "value": {
+    "lang": "rust",
+    "code": "fn main() { println!(\"hi\"); }"
+   }
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Indented code"
+     }
+    ]
+   }
+  },
+  {
+   "type": "CodeBlock",
+   "value": {
+    "lang": "rust",
+    "code": "fn outer() {\n    let indented = 1;\n        let deeper = 2;\n}"
+   }
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Preformatted without a code element"
+     }
+    ]
+   }
+  },
+  {
+   "type": "CodeBlock",
+   "value": {
+    "lang": null,
+    "code": "  two leading spaces\n      six leading spaces"
+   }
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Links that have to travel"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "A "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "http://127.0.0.1:8899/informes/2026",
+      "children": [
+       {
+        "type": "Text",
+        "value": "site-relative link"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": ", a "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "http://127.0.0.1:8899/tests/sibling/page.html",
+      "children": [
+       {
+        "type": "Text",
+        "value": "parent-relative link"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": ", and a "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "http://127.0.0.1:8899/tests/pages/markdown-content.html#a-list",
+      "children": [
+       {
+        "type": "Text",
+        "value": "fragment link"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": "."
+    }
+   ]
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Content the reader cannot see"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Table",
+   "value": {
+    "rows": [
+     {
+      "type": "TableRow",
+      "value": [
+       {
+        "type": "TableCell",
+        "value": [
+         {
+          "type": "Text",
+          "value": "Visible"
+         }
+        ]
+       },
+       {
+        "type": "TableCell",
+        "value": [
+         {
+          "type": "Text",
+          "value": "Hidden"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "type": "TableRow",
+      "value": [
+       {
+        "type": "TableCell",
+        "value": [
+         {
+          "type": "Text",
+          "value": "kept"
+         }
+        ]
+       },
+       {
+        "type": "TableCell",
+        "value": []
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "type": "BlockQuote",
+   "value": [
+    {
+     "type": "Paragraph",
+     "value": [
+      {
+       "type": "Text",
+       "value": "A quoted paragraph."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

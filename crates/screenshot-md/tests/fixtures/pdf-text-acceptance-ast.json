@@ -1,0 +1,318 @@
+{
+ "children": [
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Cabecera fija — Informe de auditoría"
+    }
+   ]
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 1,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Información de auditoría del Perú"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Este párrafo abre el documento y contiene la palabra "
+    },
+    {
+     "type": "Strong",
+     "value": [
+      {
+       "type": "Text",
+       "value": "información"
+      }
+     ]
+    },
+    {
+     "type": "Text",
+     "value": " en negrita, la palabra "
+    },
+    {
+     "type": "Emphasis",
+     "value": [
+      {
+       "type": "Text",
+       "value": "auditoría"
+      }
+     ]
+    },
+    {
+     "type": "Text",
+     "value": " en cursiva y el término técnico "
+    },
+    {
+     "type": "Code",
+     "value": "señal"
+    },
+    {
+     "type": "Text",
+     "value": ". Sirve para comprobar que el texto de la parte superior se encuentra, se selecciona y se copia."
+    }
+   ]
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Enlace cerca del principio: "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "https://example.com/principio",
+      "children": [
+       {
+        "type": "Text",
+        "value": "documento de origen"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": ". También hay una referencia relativa que el navegador resuelve: "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "http://127.0.0.1:8899/informes/2026",
+      "children": [
+       {
+        "type": "Text",
+        "value": "informes de 2026"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": "."
+    }
+   ]
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Enlaces que no deben convertirse en anotaciones: "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "javascript:void(0)",
+      "children": [
+       {
+        "type": "Text",
+        "value": "acción de página"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": ", "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "data:text/html,x",
+      "children": [
+       {
+        "type": "Text",
+        "value": "recurso incrustado"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": " y "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "mailto:nadie@example.com",
+      "children": [
+       {
+        "type": "Text",
+        "value": "correo"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": "."
+    }
+   ]
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Texto que se parte en varias líneas"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Este párrafo es deliberadamente estrecho para que el navegador lo reparta en varias líneas visuales, de modo que la capa de texto tenga que dividir un único nodo en tantos renglones como se vean en la pantalla, sin que la selección se desplace ni se amontone."
+    }
+   ]
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Un enlace largo que también se parte: "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "https://example.com/una/ruta/bastante/larga/para/partirse",
+      "children": [
+       {
+        "type": "Text",
+        "value": "referencia extensa que ocupa más de una línea completa"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": "."
+    }
+   ]
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Acentos, eñes y diéresis"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "información · auditoría · Perú · señal · ñandú · Ñuñoa · pingüino · Über · «comillas angulares» · signos ¿de? ¡interrogación!"
+    }
+   ]
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Contenido intermedio"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Marcador intermedio: la verificación busca esta frase para comprobar que el texto del centro del documento también es localizable en el PDF."
+    }
+   ]
+  },
+  {
+   "type": "Heading",
+   "value": {
+    "level": 2,
+    "children": [
+     {
+      "type": "Text",
+      "value": "Contenido inferior"
+     }
+    ]
+   }
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Marcador inferior: esta frase cierra el documento y debe poder buscarse en la última página del PDF, igual que la de arriba y la del centro."
+    }
+   ]
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Enlace cerca del final: "
+    },
+    {
+     "type": "Link",
+     "value": {
+      "href": "https://example.com/final",
+      "children": [
+       {
+        "type": "Text",
+        "value": "referencia final"
+       }
+      ]
+     }
+    },
+    {
+     "type": "Text",
+     "value": "."
+    }
+   ]
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Última línea del documento de aceptación."
+    }
+   ]
+  },
+  {
+   "type": "Paragraph",
+   "value": [
+    {
+     "type": "Text",
+     "value": "Pie fijo — página 1 de 1 · FullScreenShot"
+    }
+   ]
+  }
+ ]
+}

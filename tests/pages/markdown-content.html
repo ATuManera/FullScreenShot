@@ -22,6 +22,34 @@
     </table>
     <h2>Code</h2>
     <pre><code class="language-rust">fn main() { println!("hi"); }</code></pre>
+    <!--
+      Indentation a reader can see, unlike the source indentation of the
+      prose above. Collapsing prose must not touch this, so the block is
+      deliberately nested and multi-line.
+    -->
+    <h2>Indented code</h2>
+<pre><code class="language-rust">fn outer() {
+    let indented = 1;
+        let deeper = 2;
+}</code></pre>
+    <h2>Preformatted without a code element</h2>
+<pre>  two leading spaces
+      six leading spaces</pre>
+    <h2>Links that have to travel</h2>
+    <p>A <a href="/informes/2026">site-relative link</a>, a
+    <a href="../sibling/page.html">parent-relative link</a>, and a
+    <a href="#a-list">fragment link</a>.</p>
+    <h2>Content the reader cannot see</h2>
+    <p style="display:none">Hidden by display none.</p>
+    <p style="visibility:hidden">Hidden by visibility hidden.</p>
+    <p style="opacity:0">Hidden by zero opacity.</p>
+    <p hidden>Hidden by the hidden attribute.</p>
+    <p style="content-visibility:hidden">Hidden by content-visibility.</p>
+    <p style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Hidden for screen readers only.</p>
+    <table>
+      <tr><th>Visible</th><th>Hidden</th></tr>
+      <tr><td>kept</td><td style="visibility:collapse">collapsed away</td></tr>
+    </table>
     <blockquote>A quoted paragraph.</blockquote>
   </article>
 </body>
