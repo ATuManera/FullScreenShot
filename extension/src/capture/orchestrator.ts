@@ -10,6 +10,7 @@
  */
 import { isCapturableUrl, measurePage, type PageMetrics } from "./geometry.js";
 import { applyFixedElementVisibility, restoreFixedAndStickyElements, type FixedElementCensus, type FixedVisibilityMode } from "./injectable.js";
+import { readPngDimensions } from "./pngHeader.js";
 import { classifyPrescrollOutcome, isStillGrowing, DEFAULT_MAX_PRESCROLL_PASSES } from "./lazy.js";
 import { extractMarkdownAst, type MarkdownMode } from "./markdown.js";
 import {
@@ -438,14 +439,16 @@ export async function captureFullPage(
       concatenated,
     );
 
-    // Height of what was genuinely composited (last achieved band origin plus
-    // one viewport), rather than the page height that was hoped for.
+    // Read back from the image rather than predicted from CSS geometry: at a
+    // fractional device pixel ratio the prediction can be a pixel off, and
+    // this number is what the result page shows and the metadata stores.
     const lastOffset = capturedOffsets[capturedOffsets.length - 1] ?? 0;
+    const declared = mimeType === "image/png" ? readPngDimensions(bytes) : null;
     return {
       bytes,
       mimeType,
-      width: tileWidths[0] ?? 0,
-      height: Math.round((lastOffset + metrics.viewportHeight) * dpr),
+      width: declared?.width ?? tileWidths[0] ?? 0,
+      height: declared?.height ?? Math.round((lastOffset + metrics.viewportHeight) * dpr),
     };
   } finally {
     await chrome.scripting.executeScript({ target: { tabId }, func: restoreFixedAndStickyElements });
@@ -758,11 +761,12 @@ export async function captureScrollArea(
     );
 
     const lastOffset = capturedOffsets[capturedOffsets.length - 1] ?? 0;
+    const declared = mimeType === "image/png" ? readPngDimensions(bytes) : null;
     return {
       bytes,
       mimeType,
-      width: tileWidths[0] ?? 0,
-      height: Math.round((lastOffset + geometry.visibleHeight) * dpr),
+      width: declared?.width ?? tileWidths[0] ?? 0,
+      height: declared?.height ?? Math.round((lastOffset + geometry.visibleHeight) * dpr),
     };
   } finally {
     // Put back the container's own scroll position (not 0 — wherever the user
