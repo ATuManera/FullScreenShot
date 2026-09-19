@@ -300,6 +300,36 @@ loaded them.
 - [ ] F6. The setting persists: reopen the options page and the choice you
       made is still selected.
 
+### Gate G — long output and terminal error state
+
+This gate exists because a real capture of
+`fullpage-acceptance.html` failed on a scaled display with
+"invalid dimensions: 1660x8484", and the popup then showed "Capture failed"
+with a progress bar, "Processing…" and Cancel still underneath it.
+
+Display scaling matters here: run at least one pass on a **scaled** resolution
+(System Settings → Displays → a "More Space"/scaled option, which gives a
+fractional device pixel ratio) as well as the default.
+
+- [ ] G1. Full page → PNG on `http://127.0.0.1:8899/fullpage-acceptance.html`
+      completes with no error, on both a default and a scaled display.
+- [ ] G2. The result page opens and reports a height of several thousand
+      pixels — around 8500 on a 1.5x display — and the PNG opens in Preview
+      at those exact dimensions.
+- [ ] G3. All 8 bands, one sticky header and one fixed footer, as in Gate A.
+- [ ] G4. Repeat on a real long article. A capture of tens of thousands of
+      pixels is expected to work; it is no longer bounded by anything but a
+      memory budget.
+- [ ] G5. Force a failure — capture a protected page mid-flow, or reload the
+      extension during a capture. When the error notice appears there is **no**
+      progress bar, **no** "Processing…", and **no** Cancel beneath it, and
+      the capture button is usable again immediately.
+- [ ] G6. Start a capture, close the popup, reopen it just as the capture is
+      finishing. The popup must never end up showing an error and a progress
+      bar at the same time.
+- [ ] G7. After an error, starting a new capture works and shows fresh
+      progress.
+
 ### Gate E — nothing already working regressed
 
 - [ ] E1. Visible area still captures exactly the current viewport.
