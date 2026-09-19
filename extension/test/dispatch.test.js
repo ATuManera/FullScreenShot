@@ -21,6 +21,8 @@ let onMessage;
 let messageListeners;
 /** Null makes the background fall through to the interactive picker. */
 let soleCandidate;
+/** How many candidates the injected picker reports, or "fail" to reject the injection. */
+let pickerResult;
 let injected;
 let injectedCalls;
 let captureCalls;
@@ -74,7 +76,8 @@ function makeChromeStub() {
           case "selectSoleScrollCandidate":
             return [{ result: soleCandidate }];
           case "runSelectionPicker":
-            return [{ result: 2 }];
+            if (pickerResult === "fail") throw new Error("Cannot access contents of the page.");
+            return [{ result: pickerResult }];
           case "prepareContainerForCapture":
             return [{ result: { scrollHeight: 2000, clientWidth: 600, clientHeight: 400, originalScrollTop: 0, pageScrollX: 0, pageScrollY: 0, cropX: 10, cropY: 20, cropWidth: 600, visibleHeight: 400, devicePixelRatio: 1 } }];
           case "positionContainerBand":
@@ -126,6 +129,7 @@ function resetStub() {
   globalThis.chrome = makeChromeStub();
   measureHeights = null;
   soleCandidate = { attr: "data-fullscreenshot-container-id", value: "sole" };
+  pickerResult = 2;
 }
 
 /** Delivers a message the way the browser does: to every registered listener. */
@@ -179,7 +183,8 @@ before(async () => {
 test("Full Page scrolls the window and never runs scroll-area location", async () => {
   resetStub();
   const ack = await start("fullpage");
-  assert.deepEqual(ack, { type: "STARTED" });
+  assert.equal(ack.type, "STARTED");
+  assert.ok(ack.sessionId, "the reply must name the capture it started");
   await settle();
 
   assert.ok(injected.includes("measurePage"), "expected the page to be measured");
@@ -212,7 +217,7 @@ test("Scroll Area locates a container and scrolls that, not the window", async (
 test("the capture guard is released after a failed capture, so the next one is accepted", async () => {
   resetStub();
   const ack = await start("visible");
-  assert.deepEqual(ack, { type: "STARTED" }, "a previous failure must not leave the guard held");
+  assert.equal(ack.type, "STARTED", "a previous failure must not leave the guard held");
   await settle();
 });
 
@@ -220,7 +225,7 @@ test("a single capture at a time is refused, not queued", async () => {
   resetStub();
   const first = start("fullpage");
   const second = start("fullpage");
-  assert.deepEqual(await first, { type: "STARTED" });
+  assert.equal((await first).type, "STARTED");
   assert.deepEqual(await second, { type: "ALREADY_CAPTURING" });
   await settle();
 });
@@ -389,7 +394,7 @@ test("a cancelled selection releases the capture guard immediately", async () =>
   await settle();
 
   const ack = await start("visible");
-  assert.deepEqual(ack, { type: "STARTED" }, "the next capture must not be refused");
+  assert.equal(ack.type, "STARTED", "the next capture must not be refused");
   await settle();
 });
 
@@ -483,4 +488,84 @@ test("a selection that picks a container still captures it", async () => {
 
   assert.ok(injected.includes("prepareContainerForCapture"), "expected the chosen container to be captured");
   assert.ok(!broadcasts.some((m) => m.type === "CANCELLED"));
+});
+
+// --- Handing the page over to the picker -----------------------------------
+// While the popup is open it holds the keyboard, so an Escape meant for the
+// picker only dismissed the popup and cancelling took two presses. The popup
+// closes itself once the picker is up — but only once, and only on word that
+// there is a picker there to receive the user.
+
+test("arming the picker is announced, so the popup can step aside", async () => {
+  resetStub();
+  soleCandidate = null;
+  const ack = await start("scrollarea");
+  assert.ok(await waitForPicker());
+  await new Promise((r) => setTimeout(r, 100));
+
+  const armed = broadcasts.find((m) => m.type === "PICKER_ARMED");
+  assert.ok(armed, "expected the popup to be told the picker is up");
+  assert.equal(armed.sessionId, ack.sessionId, "it must name the capture the popup started");
+
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  await settle();
+});
+
+test("nothing is announced before the picker is actually on the page", async () => {
+  resetStub();
+  soleCandidate = null;
+  const pending = start("scrollarea");
+  // Before the injection resolves there is no picker yet, so no handover.
+  assert.ok(!broadcasts.some((m) => m.type === "PICKER_ARMED"));
+  await pending;
+  await waitForPicker();
+  await new Promise((r) => setTimeout(r, 100));
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  await settle();
+});
+
+test("a page with nothing to pick never asks the popup to step aside", async () => {
+  resetStub();
+  soleCandidate = null;
+  pickerResult = 0;
+  await start("scrollarea");
+  await settle();
+
+  assert.ok(!broadcasts.some((m) => m.type === "PICKER_ARMED"), "there is no picker to hand over to");
+  assert.ok(broadcasts.some((m) => m.type === "NO_CONTAINER_SELECTED"));
+});
+
+test("a picker that fails to install leaves the popup open and says why", async () => {
+  resetStub();
+  soleCandidate = null;
+  pickerResult = "fail";
+  await start("scrollarea");
+  await settle();
+
+  assert.ok(!broadcasts.some((m) => m.type === "PICKER_ARMED"), "closing the popup here would hide the failure");
+  const failure = broadcasts.find((m) => m.type === "ERROR");
+  assert.ok(failure, "the user must be told the picker could not be opened");
+});
+
+test("a single scroll area captures directly, with no picker and no handover", async () => {
+  resetStub();
+  await start("scrollarea");
+  await settle();
+
+  assert.ok(!injected.includes("runSelectionPicker"), "one region needs no picker");
+  assert.ok(!broadcasts.some((m) => m.type === "PICKER_ARMED"), "and no reason to close the popup");
+  assert.ok(injected.includes("prepareContainerForCapture"));
+});
+
+test("every capture gets its own session, so an old handover cannot close a new popup", async () => {
+  resetStub();
+  soleCandidate = null;
+  const first = await start("scrollarea");
+  await waitForPicker();
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  await settle();
+
+  const second = await start("scrollarea");
+  await settle();
+  assert.notEqual(first.sessionId, second.sessionId);
 });

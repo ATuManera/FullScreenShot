@@ -310,6 +310,15 @@ function applyProgressUiState(state: ProgressUiState): void {
  */
 let finishedSession: string | null = null;
 
+/**
+ * The capture this popup started, learned from the STARTED reply.
+ *
+ * Used to recognise the scroll-area picker being armed *for this request*.
+ * An arming message from some earlier capture must not close a popup that is
+ * now being used for something else.
+ */
+let startedSession: string | null = null;
+
 /** Applies an update unless it is a stale description of a capture that already ended. */
 function applyUpdate(message: ProgressRelevantMessage): void {
   if (describesAFinishedCapture(message, finishedSession)) {
@@ -320,6 +329,18 @@ function applyUpdate(message: ProgressRelevantMessage): void {
 
 chrome.runtime.onMessage.addListener((raw: unknown) => {
   const message = raw as OutboundMessage;
+  if (message.type === "PICKER_ARMED") {
+    // The page now has a picker on it and needs the keyboard. While this
+    // window is open it holds focus, so an Escape meant for the picker would
+    // only dismiss the popup — which is why cancelling used to take two.
+    // Closing only on this message, and only for this popup's own capture,
+    // means the window never gets out of the way before there is something
+    // there to receive the user.
+    if (message.sessionId !== undefined && message.sessionId === startedSession) {
+      window.close();
+    }
+    return;
+  }
   if (message.type !== "STARTED" && describesAFinishedCapture(message, finishedSession)) {
     return;
   }
@@ -398,7 +419,11 @@ async function startCapture(mode: CaptureMode): Promise<void> {
     showError({ title: "Capture already running", body: "Wait for the current capture to finish, or cancel it, before starting another." }, "already capturing");
     return;
   }
-  // STARTED: busy state is already set; PROGRESS/DONE/ERROR arrive via the onMessage listener above.
+  if (response.type === "STARTED") {
+    startedSession = response.sessionId ?? null;
+  }
+  // Busy state is already set; PROGRESS/DONE/ERROR arrive via the onMessage
+  // listener above, and PICKER_ARMED closes this window if a picker goes up.
 }
 
 primaryCta.addEventListener("click", () => {

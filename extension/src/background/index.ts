@@ -183,7 +183,12 @@ async function pickScrollArea(tabId: number): Promise<SelectionOutcome> {
         // tell someone than "you chose not to pick".
         if (injected?.result === 0) {
           settle({ status: "no-candidates" });
+          return;
         }
+        // The page now has a picker on it. Saying so is what lets the popup
+        // step aside: while it is open it holds the keyboard, so the first
+        // Escape only dismisses the popup and never reaches the picker.
+        broadcast({ type: "PICKER_ARMED" });
       })
       .catch((e: unknown) => settle({ status: "error", message: e instanceof Error ? e.message : String(e) }));
   });
@@ -271,7 +276,6 @@ async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (mes
 }
 
 async function runCapture(msg: StartCaptureMessage, isCancelled: () => boolean): Promise<void> {
-  captureSessionId = crypto.randomUUID();
   active = { mode: msg.mode, progress: { text: "Preparing…" } };
   broadcast({ type: "PROGRESS", text: "Preparing…" });
   setBadgeIndeterminate();
@@ -378,7 +382,10 @@ chrome.runtime.onMessage.addListener((raw: unknown, _sender, sendResponse: (resp
     return false;
   }
   cancelRequested = false;
-  sendResponse({ type: "STARTED" });
+  // Minted before the reply so the popup learns which capture is its own, and
+  // can tell this capture's later messages from a previous one's.
+  captureSessionId = crypto.randomUUID();
+  sendResponse({ type: "STARTED", sessionId: captureSessionId });
   void runCapture(message, () => cancelRequested);
   return false;
 });

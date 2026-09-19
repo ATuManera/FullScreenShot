@@ -114,9 +114,26 @@ export interface AlreadyCapturingMessage {
   type: "ALREADY_CAPTURING";
 }
 
-/** Synchronous reply to a START_CAPTURE that was accepted; the capture itself proceeds asynchronously. */
-export interface StartedMessage {
+/**
+ * Synchronous reply to a START_CAPTURE that was accepted; the capture itself
+ * proceeds asynchronously. Carries the session it started so the popup can
+ * recognise later messages as belonging to the capture it asked for.
+ */
+export interface StartedMessage extends CaptureSession {
   type: "STARTED";
+}
+
+/**
+ * The scroll-area picker is now installed and waiting on the page.
+ *
+ * Sent only once the injection has succeeded and found something to pick, so
+ * the popup can hand the page over — close itself — knowing there is a picker
+ * there to receive the user. A failure never produces this message, which is
+ * what keeps a failed arming from leaving the user with a closed popup, no
+ * picker and nothing said.
+ */
+export interface PickerArmedMessage extends CaptureSession {
+  type: "PICKER_ARMED";
 }
 
 /** Reply to GetStateMessage: whether a capture is active right now, and its last known progress. */
@@ -135,7 +152,8 @@ export type OutboundMessage =
   | NoContainerSelectedMessage
   | AlreadyCapturingMessage
   | StateMessage
-  | StartedMessage;
+  | StartedMessage
+  | PickerArmedMessage;
 
 function isCaptureMode(value: unknown): value is CaptureMode {
   return value === "visible" || value === "fullpage" || value === "scrollarea" || value === "markdown";
