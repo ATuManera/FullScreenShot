@@ -96,7 +96,45 @@ fn validate_inputs(
     Ok(output_width)
 }
 
-/// How many device rows each tile contributes to the output, in order.
+/// One tile's contribution to the composite: where its band begins in the
+/// source it was scrolled through (CSS px, the same coordinate space the
+/// plan's offsets use) and which output rows it occupies (device px).
+///
+/// This is the single place the capture's geometry becomes output rows.
+/// `compose_streaming` writes pixels from it and the PDF text layer places
+/// its invisible glyphs from it, so a line of text cannot land a row away
+/// from the pixels it describes — the two read the same numbers rather than
+/// re-deriving them from CSS arithmetic apiece.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Band {
+    /// Where this band starts in the source, in CSS px.
+    pub source_offset_css: f64,
+    /// The first output row this band writes.
+    pub device_row_start: u32,
+    /// How many output rows it writes.
+    pub device_rows: u32,
+}
+
+impl Band {
+    /// The source position, in CSS px, that output row `device_row_start +
+    /// rows_in` came from. Exact for the band's own rows; callers clamp.
+    pub fn source_css_at_row(&self, rows_in: f64, dpr: f64) -> f64 {
+        self.source_offset_css + rows_in / dpr
+    }
+
+    /// The output row a source position falls on, if it falls in this band.
+    pub fn device_row_of_source_css(&self, source_css: f64, dpr: f64) -> f64 {
+        self.device_row_start as f64 + (source_css - self.source_offset_css) * dpr
+    }
+
+    /// Whether `source_css` lies within the span this band contributes.
+    pub fn contains_source_css(&self, source_css: f64, dpr: f64) -> bool {
+        let end = self.source_offset_css + self.device_rows as f64 / dpr;
+        source_css >= self.source_offset_css && source_css < end
+    }
+}
+
+/// How each tile contributes to the output, in order.
 ///
 /// Every band but the last is the gap to the next tile's origin, in device
 /// pixels. The last band is the last screenshot itself, and that is the
@@ -111,43 +149,63 @@ fn validate_inputs(
 ///
 /// Tile heights are therefore allowed to differ from each other by the
 /// browser's rounding. Widths are not: they set the output width.
-fn planned_band_rows(
+fn bands_unchecked(
     plan: &CapturePlan,
     dpr: f64,
     tiles: &[TileImage<'_>],
-) -> Result<Vec<u32>, CoreError> {
+) -> Result<Vec<Band>, CoreError> {
     let last = plan.tiles.len() - 1;
-    let mut rows = Vec::with_capacity(plan.tiles.len());
+    let mut bands = Vec::with_capacity(plan.tiles.len());
+    let mut device_row_start: u32 = 0;
     for (i, planned) in plan.tiles.iter().enumerate() {
         let image_rows = tiles[i].meta.height;
-        if i == last {
-            rows.push(image_rows);
-            continue;
-        }
-        let start = (planned.scroll_offset.y * dpr).round();
-        let end = (plan.tiles[i + 1].scroll_offset.y * dpr).round();
-        let needed = (end - start).max(0.0) as u32;
-        // A band wider than its own screenshot would leave a gap in the
-        // page. It cannot happen for a plan whose stride is smaller than the
-        // viewport, which is every plan this crate produces, so it is a real
-        // inconsistency rather than rounding — and it is reported as one,
-        // not as a dimension problem.
-        if needed > image_rows {
-            return Err(CoreError::Overflow(format!(
-                "tile {i} must supply {needed} device rows but its screenshot is only {image_rows} tall"
-            )));
-        }
-        rows.push(needed);
+        let device_rows = if i == last {
+            image_rows
+        } else {
+            let start = (planned.scroll_offset.y * dpr).round();
+            let end = (plan.tiles[i + 1].scroll_offset.y * dpr).round();
+            let needed = (end - start).max(0.0) as u32;
+            // A band wider than its own screenshot would leave a gap in the
+            // page. It cannot happen for a plan whose stride is smaller than
+            // the viewport, which is every plan this crate produces, so it is
+            // a real inconsistency rather than rounding — and it is reported
+            // as one, not as a dimension problem.
+            if needed > image_rows {
+                return Err(CoreError::Overflow(format!(
+                    "tile {i} must supply {needed} device rows but its screenshot is only {image_rows} tall"
+                )));
+            }
+            needed
+        };
+        bands.push(Band {
+            source_offset_css: planned.scroll_offset.y,
+            device_row_start,
+            device_rows,
+        });
+        device_row_start = device_row_start.checked_add(device_rows).ok_or_else(|| {
+            CoreError::Overflow("composite height overflows a 32-bit row count".to_string())
+        })?;
     }
-    Ok(rows)
+    Ok(bands)
 }
 
-fn total_rows(rows: &[u32]) -> Result<u32, CoreError> {
-    rows.iter().try_fold(0u32, |acc, r| {
-        acc.checked_add(*r).ok_or_else(|| {
-            CoreError::Overflow("composite height overflows a 32-bit row count".to_string())
-        })
-    })
+/// The validated band map for `tiles`, for consumers outside composition —
+/// the PDF text layer being the one that exists, which needs to know where a
+/// document position ended up in the composited image.
+pub fn band_map(
+    plan: &CapturePlan,
+    dpr: f64,
+    tiles: &[TileImage<'_>],
+) -> Result<Vec<Band>, CoreError> {
+    validate_inputs(plan, dpr, tiles)?;
+    bands_unchecked(plan, dpr, tiles)
+}
+
+fn total_rows(bands: &[Band]) -> u32 {
+    match bands.last() {
+        Some(b) => b.device_row_start + b.device_rows,
+        None => 0,
+    }
 }
 
 /// Streams a full-page composite from `tiles` (in the same order as
@@ -156,7 +214,7 @@ fn total_rows(rows: &[u32]) -> Result<u32, CoreError> {
 /// `[scroll_offset_i, scroll_offset_{i+1})` from its own top edge — the
 /// overlap in `plan` is rounding tolerance, not a blend region, so no two
 /// tiles ever write the same output row. The last tile contributes its whole
-/// screenshot; see `planned_band_rows` for why that, and not CSS arithmetic,
+/// screenshot; see `bands_unchecked` for why that, and not CSS arithmetic,
 /// defines where the image ends.
 pub fn compose_streaming(
     plan: &CapturePlan,
@@ -165,15 +223,15 @@ pub fn compose_streaming(
     sink: &mut dyn RowSink,
 ) -> Result<CompositeDimensions, CoreError> {
     let output_width = validate_inputs(plan, dpr, tiles)?;
-    let band_rows = planned_band_rows(plan, dpr, tiles)?;
-    let output_height = total_rows(&band_rows)?;
+    let bands = bands_unchecked(plan, dpr, tiles)?;
+    let output_height = total_rows(&bands);
     validate_output_dimensions(output_width, output_height)?;
 
     let row_len = output_width as usize * 4;
     let mut rows_written: u32 = 0;
 
-    for (image, rows_to_write) in tiles.iter().zip(band_rows.iter()) {
-        for local_row in 0..*rows_to_write {
+    for (image, band) in tiles.iter().zip(bands.iter()) {
+        for local_row in 0..band.device_rows {
             let start = local_row as usize * row_len;
             let end = start + row_len;
             sink.write_row(&image.rgba[start..end])?;
@@ -182,7 +240,7 @@ pub fn compose_streaming(
     }
 
     // Now a pure internal-consistency assertion — the plan and the writing
-    // loop read from the same `band_rows` — rather than a comparison between
+    // loop read from the same `bands` — rather than a comparison between
     // CSS arithmetic and real pixels, which is what used to fail here.
     if rows_written != output_height {
         return Err(CoreError::Overflow(format!(
@@ -199,14 +257,14 @@ pub fn compose_streaming(
 /// The exact output height a composite will have, computable before any row
 /// is streamed — this is what a PNG writer declares in its header, so it must
 /// agree with `compose_streaming` exactly or the file is corrupt. Both derive
-/// it from the same `planned_band_rows`, which is why they cannot drift.
+/// it from the same band map, which is why they cannot drift.
 pub fn expected_output_height(
     plan: &CapturePlan,
     dpr: f64,
     tiles: &[TileImage<'_>],
 ) -> Result<u32, CoreError> {
     let output_width = validate_inputs(plan, dpr, tiles)?;
-    let height = total_rows(&planned_band_rows(plan, dpr, tiles)?)?;
+    let height = total_rows(&bands_unchecked(plan, dpr, tiles)?);
     validate_output_dimensions(output_width, height)?;
     Ok(height)
 }
@@ -621,6 +679,117 @@ mod tests {
             let mut sink = CollectingSink { rows: Vec::new() };
             let dims = compose_streaming(&plan, dpr, &tiles, &mut sink).unwrap();
             assert_eq!(dims.height, expected);
+        }
+    }
+
+    /// The band map is what the PDF text layer places glyphs from, so it has
+    /// to describe exactly the rows `compose_streaming` wrote — not
+    /// approximately, and not off by the rounding the two might each do.
+    #[test]
+    fn band_map_row_starts_match_where_compose_streaming_wrote_each_tile() {
+        let viewport = Size {
+            width: 2.0,
+            height: 4.0,
+        };
+        let plan = plan_with_offsets(&[0.0, 3.0, 6.0], viewport);
+        let built: Vec<(TileImageMeta, Vec<u8>)> = (0..3)
+            .map(|i| solid_tile(i, 2, 4, [i as u8 + 1, 0, 0, 255]))
+            .collect();
+        let tiles: Vec<TileImage<'_>> = built
+            .iter()
+            .map(|(meta, rgba)| TileImage { meta: *meta, rgba })
+            .collect();
+
+        let bands = band_map(&plan, 1.0, &tiles).unwrap();
+        let mut sink = CollectingSink { rows: Vec::new() };
+        compose_streaming(&plan, 1.0, &tiles, &mut sink).unwrap();
+
+        for band in &bands {
+            // Every row the band claims carries the colour of the tile it
+            // came from, so the claim is checked against real pixels.
+            let expected = (band.source_offset_css / 3.0) as u8 + 1;
+            for r in 0..band.device_rows {
+                let row = &sink.rows[(band.device_row_start + r) as usize];
+                assert_eq!(
+                    row[0],
+                    expected,
+                    "row {} belongs to another tile",
+                    band.device_row_start + r
+                );
+            }
+        }
+        assert_eq!(
+            bands.last().unwrap().device_row_start + bands.last().unwrap().device_rows,
+            sink.rows.len() as u32
+        );
+    }
+
+    #[test]
+    fn band_map_maps_a_source_position_to_its_output_row_at_every_dpr() {
+        let viewport = Size {
+            width: 2.0,
+            height: 100.0,
+        };
+        for dpr in [1.0, 1.25, 1.5, 1.75, 2.0] {
+            let plan = plan_with_offsets(&[0.0, 60.0], viewport);
+            let rows = (100.0 * dpr) as u32;
+            let built: Vec<(TileImageMeta, Vec<u8>)> = (0..2)
+                .map(|i| solid_tile(i, 2, rows, [0, 0, 0, 255]))
+                .collect();
+            let tiles: Vec<TileImage<'_>> = built
+                .iter()
+                .map(|(meta, rgba)| TileImage { meta: *meta, rgba })
+                .collect();
+            let bands = band_map(&plan, dpr, &tiles).unwrap();
+
+            // The top of the document is the top of the output, always.
+            assert!(bands[0].contains_source_css(0.0, dpr));
+            assert_eq!(bands[0].device_row_of_source_css(0.0, dpr), 0.0);
+
+            // A position inside the second band lands where that band put it,
+            // which is within half a device row of the naive `y * dpr` — the
+            // difference being the browser's own rounding at the seam, not
+            // drift this map introduced.
+            let y = 80.0;
+            assert!(bands[1].contains_source_css(y, dpr));
+            let row = bands[1].device_row_of_source_css(y, dpr);
+            assert!(
+                (row - y * dpr).abs() <= 0.5,
+                "dpr {dpr}: row {row} vs {} drifted more than the seam's rounding",
+                y * dpr
+            );
+        }
+    }
+
+    #[test]
+    fn band_map_covers_the_source_without_gap_or_overlap() {
+        let viewport = Size {
+            width: 2.0,
+            height: 4.0,
+        };
+        let plan = plan_with_offsets(&[0.0, 3.0, 6.0], viewport);
+        let built: Vec<(TileImageMeta, Vec<u8>)> = (0..3)
+            .map(|i| solid_tile(i, 2, 4, [9, 9, 9, 255]))
+            .collect();
+        let tiles: Vec<TileImage<'_>> = built
+            .iter()
+            .map(|(meta, rgba)| TileImage { meta: *meta, rgba })
+            .collect();
+        let bands = band_map(&plan, 1.0, &tiles).unwrap();
+        for w in bands.windows(2) {
+            assert_eq!(
+                w[0].device_row_start + w[0].device_rows,
+                w[1].device_row_start
+            );
+        }
+        // Every source row in the composite belongs to exactly one band.
+        for y in 0..10 {
+            let y = y as f64;
+            let owners = bands
+                .iter()
+                .filter(|b| b.contains_source_css(y, 1.0))
+                .count();
+            assert_eq!(owners, 1, "source y={y} is owned by {owners} bands");
         }
     }
 

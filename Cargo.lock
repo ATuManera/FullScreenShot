@@ -414,6 +414,8 @@ dependencies = [
  "flate2",
  "pdf-writer",
  "screenshot-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
