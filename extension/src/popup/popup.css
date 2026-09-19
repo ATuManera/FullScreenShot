@@ -66,12 +66,12 @@ body {
 /* Header */
 
 /*
- * Portability insurance, not a bug fix: `.progress-row`, `.mode-card` and
- * `.row-action` below all set `display`, and they only lose to the browser's
- * own `[hidden]` rule because Chrome marks that rule `!important`. Nothing in
- * the HTML spec requires that, so stating it here keeps `element.hidden` from
- * silently becoming a no-op on a browser that follows the plain cascade —
- * Safari being the next target this codebase carries.
+ * `.progress-row`, `.mode-card` and `.row-action` below all set `display`,
+ * and an author `display` rule outranks the browser's own `[hidden]` rule —
+ * so without this, `element.hidden = true` on any of them does nothing at
+ * all. The result page had the same defect and it was visible there: a Close
+ * button on screen from load, wired up only later, doing nothing when
+ * pressed. Declared once, first, for every element this popup hides.
  */
 [hidden] {
   display: none !important;

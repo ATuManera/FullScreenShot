@@ -35,6 +35,37 @@ export const DOWNLOAD_AGAIN_LABEL = "Download again";
 export const CLOSE_LABEL = "Close";
 export const CLOSE_FALLBACK_TEXT = "You can close this tab when you're done.";
 
+/**
+ * How the page asks to be closed, with everything it touches passed in.
+ *
+ * There is no permission-free way to be told whether `window.close()` worked,
+ * and no synchronous signal either. What is reliable is the negative: a tab
+ * that actually closed never runs anything scheduled afterwards. So the
+ * scheduled step means the close was refused, and the button gives way to an
+ * instruction instead of sitting there looking broken.
+ *
+ * Kept here, with its effects as ports, so the sequence is testable without a
+ * browser — the bug this replaces was precisely a control that looked
+ * available and did nothing.
+ */
+export interface CloseControlPorts {
+  close: () => void;
+  hideButton: () => void;
+  showFallback: (text: string) => void;
+  schedule: (run: () => void, delayMs: number) => void;
+}
+
+/** How long to wait before concluding the browser refused to close the tab. */
+export const CLOSE_CONFIRMATION_DELAY_MS = 300;
+
+export function requestClose(ports: CloseControlPorts): void {
+  ports.close();
+  ports.schedule(() => {
+    ports.hideButton();
+    ports.showFallback(CLOSE_FALLBACK_TEXT);
+  }, CLOSE_CONFIRMATION_DELAY_MS);
+}
+
 function extensionLabel(mimeType: string): string {
   if (mimeType === "image/png") return "PNG";
   if (mimeType === "application/pdf") return "PDF";

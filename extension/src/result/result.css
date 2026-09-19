@@ -72,6 +72,19 @@ body {
   padding: 20px 24px 24px;
 }
 
+
+/*
+ * The browser's own `[hidden] { display: none }` comes from the user-agent
+ * stylesheet, and an author `display` rule outranks it — `.secondary-btn`
+ * and the preview elements below all set one, so `hidden` on them was doing
+ * nothing. That is how the Close button came to be on screen from page load
+ * while it was only wired up later: visible, and doing nothing when pressed.
+ * Declared once, first, for every element this page hides.
+ */
+[hidden] {
+  display: none !important;
+}
+
 .result-header {
   display: flex;
   align-items: center;

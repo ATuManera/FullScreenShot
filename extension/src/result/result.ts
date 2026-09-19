@@ -3,7 +3,6 @@
 
 import { loadResult } from "../shared/resultStore.js";
 import {
-  CLOSE_FALLBACK_TEXT,
   DOWNLOADED_STATUS,
   DOWNLOAD_AGAIN_LABEL,
   DOWNLOAD_LOCATION_NOTE,
@@ -15,6 +14,7 @@ import {
   TTL_NOTE,
   downloadButtonLabel,
   formatFormatSummary,
+  requestClose,
 } from "./resultView.js";
 
 const statusPill = document.getElementById("status-pill");
@@ -52,32 +52,49 @@ function setStatus(text: string, state: "ready" | "downloaded" | "expired" | "mi
 }
 
 /**
- * Attempts to close this extension-created tab without the `downloads`
- * or `tabs` permission. `window.close()` works for a tab Chrome
- * considers "opened by a script" — which `chrome.tabs.create()` from
- * the background counts as — but Chrome may still refuse it in some
- * contexts. There's no synchronous success signal, so failure is
- * detected by simply still being here shortly afterward, and the UI
- * degrades to a plain instruction rather than a button that appears to
- * do nothing.
+ * Attempts to close this extension-created tab without the `downloads` or
+ * `tabs` permission. `window.close()` works for a tab Chrome considers
+ * "opened by a script" — which `chrome.tabs.create()` from the background
+ * counts as — but Chrome may still refuse it in some contexts.
+ *
+ * There is no synchronous success signal, so success is inferred from this
+ * page no longer existing: a tab that closed never runs the timeout at all.
+ * If it does run, the close was refused, and the button is replaced with a
+ * plain instruction rather than left behind looking broken.
  */
 function attemptClose(button: HTMLButtonElement, fallback: HTMLElement | null): void {
-  window.close();
-  setTimeout(() => {
-    if (!document.hidden) {
+  requestClose({
+    close: () => window.close(),
+    hideButton: () => {
       button.hidden = true;
+    },
+    showFallback: (text) => {
       if (fallback) {
-        fallback.textContent = CLOSE_FALLBACK_TEXT;
+        fallback.textContent = text;
         fallback.hidden = false;
       }
-    }
-  }, 300);
+    },
+    schedule: (run, delayMs) => {
+      setTimeout(run, delayMs);
+    },
+  });
 }
 
+/**
+ * Shows a close button and arms it, in that order and only together.
+ *
+ * Keeping the two inseparable is the point: the button used to be revealed by
+ * CSS long before this ran, so for most of the page's life it was a control
+ * that did nothing when pressed. Idempotent, because the download handler
+ * runs on every click.
+ */
 function wireClose(button: HTMLButtonElement | null, fallback: HTMLElement | null): void {
-  if (!button) return;
-  button.hidden = false;
+  if (!button || button.dataset.closeWired === "true") {
+    return;
+  }
+  button.dataset.closeWired = "true";
   button.addEventListener("click", () => attemptClose(button, fallback));
+  button.hidden = false;
 }
 
 function showExpired(status: string, state: "expired" | "missing", title: string, body: string): void {
@@ -148,7 +165,6 @@ async function main(): Promise<void> {
       debounceClicks(() => {
         setStatus(DOWNLOADED_STATUS, "downloaded");
         downloadLink.textContent = DOWNLOAD_AGAIN_LABEL;
-        wireClose(closeBtn, closeFallback);
       }),
     );
   }
@@ -169,6 +185,11 @@ async function main(): Promise<void> {
       previewPanel.hidden = false;
     }
   }
+
+  // Offered as soon as there is a result to dismiss, rather than only after
+  // a download: someone who has looked at the preview and decided against
+  // keeping it still needs a way out of the tab.
+  wireClose(closeBtn, closeFallback);
 
   setStatus(READY_STATUS, "ready");
 }

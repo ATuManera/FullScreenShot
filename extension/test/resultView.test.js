@@ -24,6 +24,7 @@ import {
   downloadButtonLabel,
   formatFormatSummary,
 } from "../../dist/chromium/result/resultView.js";
+import { CLOSE_CONFIRMATION_DELAY_MS, requestClose } from "../../dist/chromium/result/resultView.js";
 
 test("ready-state download label names the format", () => {
   assert.equal(downloadButtonLabel("image/png"), "Download PNG");
@@ -95,4 +96,55 @@ test("close/download-again labels are plain and do not overclaim behavior", () =
   assert.equal(DOWNLOAD_AGAIN_LABEL, "Download again");
   assert.equal(CLOSE_LABEL, "Close");
   assert.match(CLOSE_FALLBACK_TEXT, /close this tab/i);
+});
+
+// --- Close ----------------------------------------------------------------
+// The physical failure: the Close button was on screen from page load but was
+// only wired up later, so pressing it did nothing at all — it neither closed
+// the tab nor said why.
+
+
+function ports() {
+  const calls = { closed: 0, hidden: 0, fallback: null, scheduled: null, delay: null };
+  return [
+    calls,
+    {
+      close: () => { calls.closed += 1; },
+      hideButton: () => { calls.hidden += 1; },
+      showFallback: (text) => { calls.fallback = text; },
+      schedule: (run, delayMs) => { calls.scheduled = run; calls.delay = delayMs; },
+    },
+  ];
+}
+
+test("pressing Close asks the browser to close the tab", () => {
+  const [calls, p] = ports();
+  requestClose(p);
+  assert.equal(calls.closed, 1);
+});
+
+test("a tab that closes never shows the fallback", () => {
+  // A closed tab runs nothing scheduled afterwards, so leaving the scheduled
+  // step uninvoked is exactly what success looks like.
+  const [calls, p] = ports();
+  requestClose(p);
+  assert.equal(calls.fallback, null);
+  assert.equal(calls.hidden, 0);
+});
+
+test("a refused close replaces the button with an instruction", () => {
+  const [calls, p] = ports();
+  requestClose(p);
+  calls.scheduled();
+  assert.equal(calls.hidden, 1, "a button that cannot close must not stay");
+  assert.equal(calls.fallback, CLOSE_FALLBACK_TEXT);
+});
+
+test("the fallback tells the reader what to do, without blaming the browser", () => {
+  assert.match(CLOSE_FALLBACK_TEXT, /close this tab/i);
+  assert.doesNotMatch(CLOSE_FALLBACK_TEXT, /error|failed|refused|blocked/i);
+});
+
+test("the wait before giving up is short enough to feel like a response", () => {
+  assert.ok(CLOSE_CONFIRMATION_DELAY_MS > 0 && CLOSE_CONFIRMATION_DELAY_MS <= 500, `${CLOSE_CONFIRMATION_DELAY_MS}ms`);
 });
