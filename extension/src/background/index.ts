@@ -5,7 +5,8 @@ import { browser } from "../browser/index.js";
 import { CaptureCancelledError, captureFullPage, captureScrollArea, captureVisible, exportMarkdown, PageNotCapturableError, type CaptureProgress } from "../capture/orchestrator.js";
 import { abortSelectionPicker, runSelectionPicker, CONTAINER_SELECTOR_ATTR, type ContainerSelector } from "../capture/selection.js";
 import { parseSelectionMessage, type SelectionAck, type SelectionOutcome } from "../capture/selectionProtocol.js";
-import { selectSoleScrollCandidate } from "../capture/scrollDetectionInjectable.js";
+import { detectScrollCandidates, keepScrollCandidates, locatePageScroller } from "../capture/scrollDetectionInjectable.js";
+import { rankAndDeduplicate } from "../capture/scrollAnalysis.js";
 import { clearBadge, setBadgeError, setBadgeIndeterminate, setBadgeProgress, setBadgeSuccess } from "./badge.js";
 import { parseInboundMessage, type CaptureMode, type OutboundMessage, type StartCaptureMessage } from "./messages.js";
 import { buildStateMessage, shouldRefuseNewCapture, type ActiveCapture } from "./captureGuard.js";
@@ -224,6 +225,24 @@ async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (mes
     return { kind: "export", result: await captureVisible(tabId) };
   }
   if (msg.mode === "fullpage") {
+    // A page whose body scrolls instead of its root is one screen tall as far
+    // as the window is concerned; its content is captured from the body, the
+    // way a scroll area is. Reliable's pre-scroll drives the window, so it
+    // does not apply on such a page.
+    const [{ result: pageScroller }] = (await chrome.scripting.executeScript({
+      target: { tabId },
+      func: locatePageScroller,
+      args: [CONTAINER_SELECTOR_ATTR],
+    })) as unknown as [{ result: ContainerSelector | null }];
+    if (pageScroller) {
+      return {
+        kind: "export",
+        result: await captureScrollArea(tabId, pageScroller, onProgress, isCancelled, msg.exportFormat, {
+          pageSize: msg.pdfPageSize,
+          orientation: msg.pdfOrientation,
+        }),
+      };
+    }
     return {
       kind: "export",
       result: await captureFullPage(tabId, onProgress, isCancelled, msg.lazyMode, msg.exportFormat, {
@@ -238,19 +257,31 @@ async function resolveResult(msg: StartCaptureMessage, tabId: number, send: (mes
     return { kind: "export", result: { ...result, width: 0, height: 0 } };
   }
 
-  // "scrollarea": the popup already determined (via UX-P2's contextual
-  // analysis) whether there's exactly one candidate (captured directly,
-  // no overlay) or several (interactive picker). Try the direct path
-  // first; if the page changed since analysis and it no longer holds,
-  // fall back to the interactive picker rather than failing outright.
+  // "scrollarea": the same detection and deduplication the popup ran decide
+  // the path — one region is captured directly, several go to the picker.
+  // It is re-run here rather than trusted from the popup, because the page
+  // may have changed since; the picker then offers exactly these regions.
   onProgress({ text: "Locating scroll area…" });
-  const [{ result: soleSelector }] = (await chrome.scripting.executeScript({
+  const [{ result: detected }] = (await chrome.scripting.executeScript({
     target: { tabId },
-    func: selectSoleScrollCandidate,
-  })) as unknown as [{ result: ContainerSelector | null }];
+    func: detectScrollCandidates,
+    args: [CONTAINER_SELECTOR_ATTR],
+  })) as unknown as [{ result: ReturnType<typeof detectScrollCandidates> }];
+  const regions = rankAndDeduplicate(detected ?? []);
+  const keep = regions.map((r) => String(r.index));
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: keepScrollCandidates,
+    args: [CONTAINER_SELECTOR_ATTR, keep],
+  });
 
-  let selector = soleSelector;
-  if (!selector) {
+  if (regions.length === 0) {
+    return { kind: "no-container" };
+  }
+  let selector: ContainerSelector;
+  if (keep.length === 1 && keep[0] !== undefined) {
+    selector = { attr: CONTAINER_SELECTOR_ATTR, value: keep[0] };
+  } else {
     // Through `onProgress`, not a bare broadcast: the authoritative state has
     // to say the extension is waiting for a choice, or a popup reopened
     // mid-selection reconstructs the wrong thing from GET_STATE.

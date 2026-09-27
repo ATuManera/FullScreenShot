@@ -25,16 +25,27 @@ export interface ContainerSelector {
 }
 
 /**
- * Pure analysis only — never mutates the page. Returns the raw geometry
- * of every element that could plausibly be a meaningful internal scroll
- * region; `scrollAnalysis.rankAndDeduplicate` does the actual
- * size-thresholding and dedup afterwards.
+ * The one scroll-region detector. The popup's count, the direct capture and
+ * the interactive picker all take their candidates from here: each of them
+ * used to run its own copy of this filter, and the copies disagreed with the
+ * popup's deduplicated count (see `scrollAnalysis.rankAndDeduplicate`), so a
+ * page announced as having one region opened the picker anyway.
+ *
+ * Without `markAttr` it only reads the page (the popup's analysis). With it,
+ * each candidate is tagged `markAttr="<index>"` so a later step can re-find
+ * exactly the regions that survive ranking — see `keepScrollCandidates`.
+ *
+ * Reported geometry is the part of each element that is actually on screen:
+ * clipped by the viewport and by every ancestor that clips it. An element
+ * inside a collapsed `max-height: 0; overflow: hidden` panel has a full-size
+ * box of its own and used to be offered as a region nobody could see.
  */
-export function detectScrollCandidates(): ScrollCandidateGeometry[] {
+export function detectScrollCandidates(markAttr: string | null = null): ScrollCandidateGeometry[] {
   const root = document.documentElement;
   const body = document.body;
   const all = body ? body.querySelectorAll<HTMLElement>("*") : [];
   const results: ScrollCandidateGeometry[] = [];
+  const found: HTMLElement[] = [];
 
   all.forEach((el) => {
     if (el === root || el === body) {
@@ -46,6 +57,12 @@ export function detectScrollCandidates(): ScrollCandidateGeometry[] {
     if (el.scrollHeight <= el.clientHeight + 1 || el.clientWidth === 0 || el.clientHeight === 0) {
       return;
     }
+    // Form controls scroll their own value, not page content: a long
+    // <textarea> is an input to fill in, not a region to capture.
+    const tag = el.tagName;
+    if (tag === "TEXTAREA" || tag === "SELECT" || tag === "INPUT") {
+      return;
+    }
     if (el.getAttribute("aria-hidden") === "true") {
       return;
     }
@@ -60,94 +77,103 @@ export function detectScrollCandidates(): ScrollCandidateGeometry[] {
     }
 
     const rect = el.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) {
-      return;
+    let left = Math.max(rect.left, 0);
+    let top = Math.max(rect.top, 0);
+    let right = Math.min(rect.right, window.innerWidth);
+    let bottom = Math.min(rect.bottom, window.innerHeight);
+
+    // Walk up, clipping by each ancestor that actually clips this element.
+    // An absolutely positioned box escapes static ancestors until its
+    // containing block; a fixed one escapes them all.
+    let position = style.position;
+    for (let ancestor = el.parentElement; ancestor && ancestor !== root && position !== "fixed" && right > left && bottom > top; ancestor = ancestor.parentElement) {
+      const ancestorStyle = window.getComputedStyle(ancestor);
+      if (position === "absolute" && ancestorStyle.position === "static") {
+        continue;
+      }
+      if (ancestorStyle.overflowX !== "visible" || ancestorStyle.overflowY !== "visible") {
+        const clip = ancestor.getBoundingClientRect();
+        left = Math.max(left, clip.left);
+        top = Math.max(top, clip.top);
+        right = Math.min(right, clip.right);
+        bottom = Math.min(bottom, clip.bottom);
+      }
+      position = ancestorStyle.position;
     }
-    // Must actually intersect the current viewport to be a usable capture target.
-    if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) {
+    // Nothing of it on screen: not a usable capture target.
+    if (right <= left || bottom <= top) {
       return;
     }
 
     results.push({
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
+      index: results.length,
+      top,
+      left,
+      width: right - left,
+      height: bottom - top,
       scrollHeight: el.scrollHeight,
       clientHeight: el.clientHeight,
     });
+    found.push(el);
   });
+
+  if (markAttr) {
+    // A marker left over from an earlier run would make `[attr="0"]`
+    // ambiguous, so clear any before tagging this run's candidates.
+    for (const stale of Array.from(document.querySelectorAll(`[${markAttr}]`))) {
+      stale.removeAttribute(markAttr);
+    }
+    found.forEach((el, index) => el.setAttribute(markAttr, String(index)));
+  }
 
   return results;
 }
 
 /**
- * Re-runs the same detection as `detectScrollCandidates` (kept in sync
- * with it manually — see that function's filter) and, only when it
- * finds exactly one meaningful candidate by simple geometry thresholds,
- * tags that single element with the marker attribute the existing
- * scroll-capture pipeline (`selection.ts`) already knows how to
- * re-find, and returns its selector. Returns `null` for 0 or 2+
- * candidates so the caller can fall back to the interactive picker.
+ * Removes the marker from every candidate `detectScrollCandidates` tagged
+ * except those whose index is in `keep` — the regions that survived ranking
+ * and deduplication. Returns how many remain marked.
  */
-export function selectSoleScrollCandidate(): ContainerSelector | null {
-  const attr = "data-fullscreenshot-container-id";
-  const root = document.documentElement;
+export function keepScrollCandidates(attr: string, keep: string[]): number {
+  let remaining = 0;
+  for (const el of Array.from(document.querySelectorAll(`[${attr}]`))) {
+    if (keep.includes(el.getAttribute(attr) ?? "")) {
+      remaining += 1;
+    } else {
+      el.removeAttribute(attr);
+    }
+  }
+  return remaining;
+}
+
+/**
+ * Finds the element that scrolls the page when the document root does not.
+ *
+ * With `html { overflow: hidden }` and `body { height: 100%; overflow: auto }`
+ * the page's content scrolls inside the body: the root's `scrollHeight` is
+ * one screen, so Full Page planned and captured exactly one screen. When
+ * that is the case the body is tagged `attr="page"` and returned, so Full
+ * Page can capture it the way Scroll Area captures a container. Returns
+ * `null` for an ordinary page, whose root scrolls.
+ */
+export function locatePageScroller(attr: string): ContainerSelector | null {
   const body = document.body;
-  const all = body ? body.querySelectorAll<HTMLElement>("*") : [];
-  const MIN_W = 40;
-  const MIN_H = 40;
-  const MIN_SCROLL_DELTA = 24;
-
-  const candidates: HTMLElement[] = [];
-  all.forEach((el) => {
-    if (el === root || el === body) {
-      return;
-    }
-    if (el.scrollHeight <= el.clientHeight + 1 || el.clientWidth === 0 || el.clientHeight === 0) {
-      return;
-    }
-    if (el.getAttribute("aria-hidden") === "true") {
-      return;
-    }
-    const style = window.getComputedStyle(el);
-    if (style.display === "none" || style.visibility === "hidden") {
-      return;
-    }
-    const overflowY = style.overflowY;
-    if (overflowY !== "auto" && overflowY !== "scroll" && overflowY !== "overlay") {
-      return;
-    }
-    const rect = el.getBoundingClientRect();
-    if (rect.width < MIN_W || rect.height < MIN_H) {
-      return;
-    }
-    if (el.scrollHeight - el.clientHeight < MIN_SCROLL_DELTA) {
-      return;
-    }
-    // Same viewport-intersection requirement `detectScrollCandidates` applies.
-    // Without it this function and the popup's contextual analysis could
-    // disagree about how many regions exist, so the popup would offer a direct
-    // capture of a region that is not on screen at all.
-    if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) {
-      return;
-    }
-    candidates.push(el);
-  });
-
-  // A marker left over from an earlier capture would make `[attr="sole"]`
-  // ambiguous, so clear any before tagging this run's element.
+  const scroller = document.scrollingElement ?? document.documentElement;
+  if (!body || scroller.scrollHeight > scroller.clientHeight + 1) {
+    return null;
+  }
+  if (body.scrollHeight <= body.clientHeight + 1) {
+    return null;
+  }
+  const overflowY = window.getComputedStyle(body).overflowY;
+  if (overflowY !== "auto" && overflowY !== "scroll" && overflowY !== "overlay") {
+    return null;
+  }
   for (const stale of Array.from(document.querySelectorAll(`[${attr}]`))) {
     stale.removeAttribute(attr);
   }
-
-  const el = candidates[0];
-  if (candidates.length !== 1 || !el) {
-    return null;
-  }
-
-  el.setAttribute(attr, "sole");
-  return { attr, value: "sole" };
+  body.setAttribute(attr, "page");
+  return { attr, value: "page" };
 }
 
 /** Exported for tests only — mirrors the marker attribute used above. */

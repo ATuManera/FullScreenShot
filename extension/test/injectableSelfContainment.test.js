@@ -22,7 +22,7 @@ const INJECTED = {
   "capture/geometry.js": ["measurePage"],
   "capture/injectable.js": ["applyFixedElementVisibility", "restoreFixedAndStickyElements"],
   "capture/markdown.js": ["extractMarkdownAst"],
-  "capture/scrollDetectionInjectable.js": ["detectScrollCandidates", "selectSoleScrollCandidate"],
+  "capture/scrollDetectionInjectable.js": ["detectScrollCandidates", "keepScrollCandidates", "locatePageScroller"],
   "capture/scrollSync.js": ["scrollWindowToVerified", "settleFrame"],
   "capture/selection.js": [
     "prepareContainerForCapture",

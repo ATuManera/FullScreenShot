@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { rankAndDeduplicate, classifyScrollAreaUiState, isMeaningfulCandidate } from "../../dist/chromium/capture/scrollAnalysis.js";
 
 function box(overrides = {}) {
-  return { top: 0, left: 0, width: 300, height: 300, scrollHeight: 900, clientHeight: 300, ...overrides };
+  return { index: 0, top: 0, left: 0, width: 300, height: 300, scrollHeight: 900, clientHeight: 300, ...overrides };
 }
 
 test("0 candidates classifies as none", () => {
@@ -69,4 +69,22 @@ test("ranking prefers larger visible area first", () => {
   const large = box({ left: 500, width: 500, height: 500, scrollHeight: 1000, clientHeight: 500 });
   const result = rankAndDeduplicate([small, large]);
   assert.equal(result[0].width, 500);
+});
+
+test("a scroller nested inside a larger scroller is a second region, not a duplicate of it", () => {
+  // A page's main scrolling column with a scrollable code block inside it:
+  // the block lies wholly within the column, but the column is not an
+  // incidental wrapper of it — both are regions someone may want to capture.
+  const mainColumn = box({ top: 0, left: 0, width: 800, height: 600, scrollHeight: 3000, clientHeight: 600 });
+  const codeBlock = box({ top: 40, left: 20, width: 400, height: 150, scrollHeight: 600, clientHeight: 150 });
+  const result = rankAndDeduplicate([mainColumn, codeBlock]);
+  assert.equal(result.length, 2);
+  assert.deepEqual(result.map((c) => c.width), [800, 400]);
+});
+
+test("every distinct region is counted unless a cap is asked for", () => {
+  // The picker highlights every region, so the count shown before it opens
+  // must be the same number.
+  const seven = Array.from({ length: 7 }, (_, i) => box({ left: i * 500 }));
+  assert.deepEqual(classifyScrollAreaUiState(rankAndDeduplicate(seven)), { kind: "multiple", count: 7 });
 });

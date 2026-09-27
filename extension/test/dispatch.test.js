@@ -19,8 +19,10 @@ const CAPTURE_SENTINEL = "stub: capture reached captureVisibleTab";
 
 let onMessage;
 let messageListeners;
-/** Null makes the background fall through to the interactive picker. */
-let soleCandidate;
+/** Raw geometry the in-page detector reports; two distinct regions make the background open the picker. */
+let candidates;
+/** What the page-scroller probe reports: null for an ordinary page whose root scrolls. */
+let pageScroller;
 /** How many candidates the injected picker reports, or "fail" to reject the injection. */
 let pickerResult;
 let injected;
@@ -73,8 +75,12 @@ function makeChromeStub() {
           }
           case "scrollWindowToVerified":
             return [{ result: { requestedY: args[0], actualY: args[0], maxScrollY: 3200 } }];
-          case "selectSoleScrollCandidate":
-            return [{ result: soleCandidate }];
+          case "detectScrollCandidates":
+            return [{ result: candidates }];
+          case "keepScrollCandidates":
+            return [{ result: args[1].length }];
+          case "locatePageScroller":
+            return [{ result: pageScroller }];
           case "runSelectionPicker":
             if (pickerResult === "fail") throw new Error("Cannot access contents of the page.");
             return [{ result: pickerResult }];
@@ -91,6 +97,12 @@ function makeChromeStub() {
     storage: { local: { get: async () => ({}), set: async () => {} }, session: { get: async () => ({}), set: async () => {} } },
   };
 }
+
+function region(index, overrides = {}) {
+  return { index, top: 0, left: 0, width: 600, height: 400, scrollHeight: 2000, clientHeight: 400, ...overrides };
+}
+const ONE_REGION = [region(0)];
+const TWO_DISTINCT_REGIONS = [region(0), region(1, { left: 700 })];
 
 function start(mode, lazyMode = "fast") {
   return new Promise((resolve) => {
@@ -128,7 +140,8 @@ function resetStub() {
   onMessage = persistentCommandListener;
   globalThis.chrome = makeChromeStub();
   measureHeights = null;
-  soleCandidate = { attr: "data-fullscreenshot-container-id", value: "sole" };
+  candidates = ONE_REGION;
+  pageScroller = null;
   pickerResult = 2;
 }
 
@@ -189,7 +202,7 @@ test("Full Page scrolls the window and never runs scroll-area location", async (
 
   assert.ok(injected.includes("measurePage"), "expected the page to be measured");
   assert.ok(injected.includes("scrollWindowToVerified"), "expected a verified window scroll");
-  assert.ok(!injected.includes("selectSoleScrollCandidate"), "Full Page must not look for a scroll area");
+  assert.ok(!injected.includes("detectScrollCandidates"), "Full Page must not look for a scroll area");
   assert.ok(!injected.includes("positionContainerBand"), "Full Page must not scroll a container");
   assert.equal(captureCalls, 1, "capture should stop at the first failing screenshot");
 });
@@ -208,7 +221,9 @@ test("Scroll Area locates a container and scrolls that, not the window", async (
   await start("scrollarea");
   await settle();
 
-  assert.ok(injected.includes("selectSoleScrollCandidate"), "expected the sole-candidate path");
+  const detection = injectedCalls.find((c) => c.name === "detectScrollCandidates");
+  assert.ok(detection, "expected the page's scroll regions to be detected");
+  assert.equal(detection.args[0], "data-fullscreenshot-container-id", "the detector must mark what it found, so the capture can re-find it");
   assert.ok(injected.includes("prepareContainerForCapture"), "expected the container to be brought into view");
   assert.ok(injected.includes("positionContainerBand"), "expected the container's own band positioning");
   assert.ok(!injected.includes("scrollWindowToVerified"), "Scroll Area must not drive the window scroll loop");
@@ -347,7 +362,7 @@ test("Reliable stops a page that never stops growing, instead of scrolling forev
 
 test("Escape ends the selection as a cancellation, not as a failure", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   await start("scrollarea");
   assert.ok(await waitForPicker(), "expected the interactive picker to be injected");
 
@@ -363,7 +378,7 @@ test("Escape ends the selection as a cancellation, not as a failure", async () =
 
 test("the page is told its terminal outcome was received, so it stops retrying", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   await start("scrollarea");
   await waitForPicker();
 
@@ -374,7 +389,7 @@ test("the page is told its terminal outcome was received, so it stops retrying",
 
 test("state is idle the moment a cancellation is acknowledged", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   await start("scrollarea");
   await waitForPicker();
   assert.equal(getState().active, true, "a pending selection is an active capture");
@@ -387,7 +402,7 @@ test("state is idle the moment a cancellation is acknowledged", async () => {
 
 test("a cancelled selection releases the capture guard immediately", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   await start("scrollarea");
   await waitForPicker();
   deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
@@ -400,7 +415,7 @@ test("a cancelled selection releases the capture guard immediately", async () =>
 
 test("cancelling produces no result and opens no result page", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   await start("scrollarea");
   await waitForPicker();
   deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
@@ -414,7 +429,7 @@ test("cancellation does not wait on the watchdog", async () => {
   // The watchdog is minutes away; if it were doing the work here, this test
   // could not finish.
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   await start("scrollarea");
   await waitForPicker();
 
@@ -430,7 +445,7 @@ test("cancellation does not wait on the watchdog", async () => {
 
 test("a page with nothing to pick is reported as such, not as a cancellation", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   // The picker reports it found no candidates at all.
   await start("scrollarea");
   await waitForPicker();
@@ -443,7 +458,7 @@ test("a page with nothing to pick is reported as such, not as a cancellation", a
 
 test("a message from an earlier selection cannot cancel the current one", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   await start("scrollarea");
   await waitForPicker();
 
@@ -461,7 +476,7 @@ test("while waiting for a choice, state says so rather than something stale", as
   // What a reopened popup reconstructs from. It used to still read
   // "Locating scroll area…" because the prompt went out as a bare broadcast.
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   await start("scrollarea");
   await waitForPicker();
 
@@ -474,7 +489,7 @@ test("while waiting for a choice, state says so rather than something stale", as
 
 test("a selection that picks a container still captures it", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   await start("scrollarea");
   await waitForPicker();
   deliver({
@@ -498,7 +513,7 @@ test("a selection that picks a container still captures it", async () => {
 
 test("arming the picker is announced, so the popup can step aside", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   const ack = await start("scrollarea");
   assert.ok(await waitForPicker());
   await new Promise((r) => setTimeout(r, 100));
@@ -513,7 +528,7 @@ test("arming the picker is announced, so the popup can step aside", async () => 
 
 test("nothing is announced before the picker is actually on the page", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   const pending = start("scrollarea");
   // Before the injection resolves there is no picker yet, so no handover.
   assert.ok(!broadcasts.some((m) => m.type === "PICKER_ARMED"));
@@ -526,7 +541,7 @@ test("nothing is announced before the picker is actually on the page", async () 
 
 test("a page with nothing to pick never asks the popup to step aside", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   pickerResult = 0;
   await start("scrollarea");
   await settle();
@@ -537,7 +552,7 @@ test("a page with nothing to pick never asks the popup to step aside", async () 
 
 test("a picker that fails to install leaves the popup open and says why", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   pickerResult = "fail";
   await start("scrollarea");
   await settle();
@@ -559,13 +574,82 @@ test("a single scroll area captures directly, with no picker and no handover", a
 
 test("every capture gets its own session, so an old handover cannot close a new popup", async () => {
   resetStub();
-  soleCandidate = null;
+  candidates = TWO_DISTINCT_REGIONS;
   const first = await start("scrollarea");
   await waitForPicker();
   deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
   await settle();
 
+  // One region, so the second capture finishes on its own instead of leaving
+  // a picker waiting — and the capture guard held — for the tests after it.
+  candidates = ONE_REGION;
   const second = await start("scrollarea");
   await settle();
   assert.notEqual(first.sessionId, second.sessionId);
+});
+
+// --- One detector, one count ------------------------------------------------
+// The popup deduplicated the detector's regions, but the direct-capture probe
+// and the picker each ran their own copy of the detection without that step.
+// A page the popup called "1 scrollable region" then opened the picker anyway,
+// outlining a wrapper and its child as two overlapping choices.
+
+test("regions that are one region after deduplication capture directly, with no picker", async () => {
+  resetStub();
+  candidates = [region(0, { width: 400, height: 400 }), region(1, { top: 5, left: 5, width: 390, height: 390 })];
+  await start("scrollarea");
+  await settle();
+
+  assert.ok(!injected.includes("runSelectionPicker"), "the popup promised one region, so there is nothing to choose");
+  const kept = injectedCalls.find((c) => c.name === "keepScrollCandidates");
+  assert.deepEqual(kept?.args, ["data-fullscreenshot-container-id", ["1"]], "only the surviving region may stay marked");
+  const prepared = injectedCalls.find((c) => c.name === "prepareContainerForCapture");
+  assert.deepEqual(prepared?.args, ["data-fullscreenshot-container-id", "1"], "the surviving region is the one captured");
+});
+
+test("the picker offers exactly the regions that survive deduplication", async () => {
+  resetStub();
+  candidates = [...TWO_DISTINCT_REGIONS, region(2, { top: 2, left: 2, width: 596, height: 396 })];
+  await start("scrollarea");
+  await waitForPicker();
+  deliver({ type: "SCROLL_AREA_SELECTION", requestId: pendingSelectionRequestId(), status: "cancelled" });
+  await settle();
+
+  const kept = injectedCalls.find((c) => c.name === "keepScrollCandidates");
+  assert.deepEqual([...(kept?.args[1] ?? [])].sort(), ["1", "2"]);
+});
+
+test("a page with no scroll region left reports that without opening a picker", async () => {
+  resetStub();
+  candidates = [];
+  await start("scrollarea");
+  await settle();
+
+  assert.ok(!injected.includes("runSelectionPicker"));
+  assert.ok(broadcasts.some((m) => m.type === "NO_CONTAINER_SELECTED"));
+});
+
+// --- A page whose body is the scroller ------------------------------------
+// With `html { overflow: hidden }` and a scrolling `body`, the document root
+// never scrolls: Full Page measured one screen and captured just that, and
+// Scroll Area — which rightly leaves the body to Full Page — found nothing.
+
+test("Full Page captures a scrolling body as the page, instead of one screen of it", async () => {
+  resetStub();
+  pageScroller = { attr: "data-fullscreenshot-container-id", value: "page" };
+  await start("fullpage");
+  await settle();
+
+  const prepared = injectedCalls.find((c) => c.name === "prepareContainerForCapture");
+  assert.deepEqual(prepared?.args, ["data-fullscreenshot-container-id", "page"]);
+  assert.ok(!injected.includes("scrollWindowToVerified"), "the window does not scroll on such a page");
+});
+
+test("Full Page on an ordinary page still scrolls the window", async () => {
+  resetStub();
+  await start("fullpage");
+  await settle();
+
+  assert.ok(injected.includes("locatePageScroller"), "expected the page to be checked for a scrolling body");
+  assert.ok(!injected.includes("prepareContainerForCapture"));
 });

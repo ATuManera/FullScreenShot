@@ -91,7 +91,12 @@ declare global {
 }
 
 /**
- * Installs the visual picker and returns how many candidates it highlighted.
+ * Installs the visual picker over the regions already marked `attr="<n>"` by
+ * `detectScrollCandidates` and narrowed by `keepScrollCandidates`, and returns
+ * how many it highlighted. It does not detect anything itself: it used to run
+ * its own copy of the detection, which disagreed with the popup's
+ * deduplicated count and outlined a wrapper and its child as two choices.
+ *
  * Returns immediately — the user's choice arrives later as a
  * `SCROLL_AREA_SELECTION` runtime message tagged with `requestId`.
  *
@@ -100,38 +105,19 @@ declare global {
  * flow can never be left pending and the page can never be left decorated.
  */
 export function runSelectionPicker(attr: string, requestId: string, watchdogMs: number): number {
-  const MIN_W = 40;
-  const MIN_H = 40;
-  const MIN_SCROLL_DELTA = 24;
   const MESSAGE_TYPE = "SCROLL_AREA_SELECTION";
 
+  const candidates = Array.from(document.querySelectorAll<HTMLElement>(`[${attr}]`));
+  const marks = candidates.map((el) => el.getAttribute(attr) ?? "");
+
   // A previous picker left running (e.g. the worker was evicted mid-selection)
-  // must be torn down before a new one is installed.
+  // must be torn down before a new one is installed. Its cleanup strips the
+  // same attribute from the elements it decorated, which may be this run's
+  // candidates, so their marks are put back afterwards.
   if (window.__fssPickerCleanup) {
     window.__fssPickerCleanup("cancelled");
+    candidates.forEach((el, i) => el.setAttribute(attr, marks[i] ?? ""));
   }
-  for (const stale of Array.from(document.querySelectorAll(`[${attr}]`))) {
-    stale.removeAttribute(attr);
-  }
-
-  const root = document.documentElement;
-  const body = document.body;
-  const all = body ? body.querySelectorAll<HTMLElement>("*") : [];
-  const candidates: HTMLElement[] = [];
-  all.forEach((el) => {
-    if (el === root || el === body) return;
-    if (el.scrollHeight <= el.clientHeight + 1 || el.clientWidth === 0 || el.clientHeight === 0) return;
-    if (el.getAttribute("aria-hidden") === "true") return;
-    const style = window.getComputedStyle(el);
-    if (style.display === "none" || style.visibility === "hidden") return;
-    const overflowY = style.overflowY;
-    if (overflowY !== "auto" && overflowY !== "scroll" && overflowY !== "overlay") return;
-    const rect = el.getBoundingClientRect();
-    if (rect.width < MIN_W || rect.height < MIN_H) return;
-    if (el.scrollHeight - el.clientHeight < MIN_SCROLL_DELTA) return;
-    if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) return;
-    candidates.push(el);
-  });
 
   let settled = false;
   /**
@@ -177,8 +163,7 @@ export function runSelectionPicker(attr: string, requestId: string, watchdogMs: 
 
   const previousOutline = new Map<HTMLElement, string>();
   const previousCursor = new Map<HTMLElement, string>();
-  candidates.forEach((el, i) => {
-    el.setAttribute(attr, String(i));
+  candidates.forEach((el) => {
     previousOutline.set(el, el.style.outline);
     previousCursor.set(el, el.style.cursor);
     el.style.outline = "2px solid #2563eb";

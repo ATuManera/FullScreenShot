@@ -10,6 +10,9 @@
  * in the UX design doc).
  */
 export interface ScrollCandidateGeometry {
+  /** Document-order position among the detector's candidates, and the value it marks that element with. */
+  index: number;
+  /** The part of the element's box that is actually on screen, clipped by the viewport and by clipping ancestors. */
   top: number;
   left: number;
   width: number;
@@ -52,7 +55,7 @@ export function isMeaningfulCandidate(c: ScrollCandidateGeometry): boolean {
   return c.width >= MIN_CANDIDATE_WIDTH_PX && c.height >= MIN_CANDIDATE_HEIGHT_PX && scrollDelta(c) >= MIN_SCROLL_DELTA_PX;
 }
 
-const CONTAINMENT_OVERLAP_THRESHOLD = 0.9;
+const NEAR_IDENTICAL_OVERLAP_THRESHOLD = 0.9;
 
 /**
  * Ranks candidates by how likely they are to be the "real" scrollable
@@ -63,8 +66,16 @@ const CONTAINMENT_OVERLAP_THRESHOLD = 0.9;
  * the two — in nested-scroll-wrapper markup the inner element is
  * typically the actual meaningful region, and the outer one is
  * incidental. Distinct, non-overlapping regions are never merged.
+ *
+ * "Near-identical" has to hold in both directions. Testing only whether one
+ * box lies inside the other also swallowed a page's main scrolling column
+ * whenever it contained a small scrollable block, leaving the popup to offer
+ * the block as the page's only region.
+ *
+ * Uncapped by default: the picker outlines every region, so the count the
+ * popup shows before it opens has to be the same number.
  */
-export function rankAndDeduplicate(candidates: ScrollCandidateGeometry[], maxResults = 5): ScrollCandidateGeometry[] {
+export function rankAndDeduplicate(candidates: ScrollCandidateGeometry[], maxResults = Number.POSITIVE_INFINITY): ScrollCandidateGeometry[] {
   const meaningful = candidates.filter(isMeaningfulCandidate);
 
   // Dedup pass processes smallest-first: when two boxes are near-
@@ -76,7 +87,7 @@ export function rankAndDeduplicate(candidates: ScrollCandidateGeometry[], maxRes
 
   const kept: ScrollCandidateGeometry[] = [];
   for (const candidate of dedupOrder) {
-    const isNearDuplicateOfKept = kept.some((existing) => overlapRatio(candidate, existing) >= CONTAINMENT_OVERLAP_THRESHOLD || overlapRatio(existing, candidate) >= CONTAINMENT_OVERLAP_THRESHOLD);
+    const isNearDuplicateOfKept = kept.some((existing) => overlapRatio(candidate, existing) >= NEAR_IDENTICAL_OVERLAP_THRESHOLD && overlapRatio(existing, candidate) >= NEAR_IDENTICAL_OVERLAP_THRESHOLD);
     if (!isNearDuplicateOfKept) {
       kept.push(candidate);
     }
