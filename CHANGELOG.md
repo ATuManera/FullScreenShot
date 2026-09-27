@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Selected Scroll Area: the popup's region count, the direct capture and the
+  picker now agree. A page announced as having one region no longer opens
+  the picker with two overlapping outlines; a scrollable block inside a
+  larger scrolling column no longer hides the column; more than five regions
+  are counted correctly; and scrollers inside collapsed panels, or text
+  boxes, are no longer offered as regions.
+- Capture Full Page now captures pages whose `body` scrolls instead of the
+  document (`html { overflow: hidden }`) in full, instead of one screen.
+
 ### Added
 
 - Markdown export quality: hidden page content (`display:none`,
