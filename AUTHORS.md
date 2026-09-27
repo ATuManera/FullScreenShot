@@ -1,10 +1,10 @@
 # Authors
 
 FullScreenShot
-Original project: ATuManera
-Original author: Fernando Gallarday
+Original project: A Tu Manera Digital (ATuManera)
+Original author: Fernando Gallarday ([@fgallarday](https://github.com/fgallarday))
 
-AI assisted by: OpenAI GPT 5.6 SOL, Anthropic Fable 5.1, Opus 5, Sonnet 5,  
+AI assisted by: GPT-6 Sol, Claude Opus 5.5, Claude Sonnet 5
 Canonical repository: https://github.com/ATuManera/FullScreenShot
 
 ## Contributors

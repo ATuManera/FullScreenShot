@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-27
+
 ### Fixed
 
 - Selected Scroll Area: the popup's region count, the direct capture and the
@@ -87,7 +89,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Basic CI (GitHub Actions): fmt, clippy, tests, workspace build, WASM
   build, TypeScript typecheck.
 
-## [0.1.0] - Unreleased
-
-Initial foundation. Not yet functional for end-user captures (see
-`docs/superpowers/specs/2026-09-17-p0-foundation-design.md` for scope).
+[Unreleased]: https://github.com/ATuManera/FullScreenShot/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ATuManera/FullScreenShot/releases/tag/v0.1.0

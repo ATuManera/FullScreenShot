@@ -1,11 +1,23 @@
 # FullScreenShot
 
+[![License](https://img.shields.io/badge/license-MPL--2.0-green.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/ATuManera/FullScreenShot?label=release)](https://github.com/ATuManera/FullScreenShot/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](CHANGELOG.md)
+[![Platform](https://img.shields.io/badge/platform-Chrome%20%7C%20Edge%20%7C%20Safari-lightgrey.svg)]()
+[![Manifest](https://img.shields.io/badge/manifest-V3-blue.svg)](extension/manifest.base.json)
+[![Core](https://img.shields.io/badge/core-Rust%20%2B%20WebAssembly-orange.svg)](crates/)
+
 > Privacy-first full-page screenshot browser extension powered by Rust
 > and WebAssembly. Capture visible pages, complete pages and scrollable
 > regions, with local export to PNG, PDF and Markdown.
 
-**Status: pre-alpha (P0 — Foundation).** Capture functionality is not
-implemented yet; see [Roadmap](#roadmap).
+**Author / Autor:** A Tu Manera Digital / Fernando Gallarday ([@fgallarday](https://github.com/fgallarday))
+
+**AI Assistance / Asistencia de IA:** Developed with the support of GPT-6 Sol, Claude Opus 5.5, and Claude Sonnet 5.
+
+**Version / Versión:** 0.1.0 — first public release. Chrome and Edge are
+supported; Safari packaging is prepared but not yet built (see
+[Limitations](#limitations)). Not yet listed in any extension store.
 
 ## What is FullScreenShot
 
@@ -15,7 +27,7 @@ scrollable pages, or a specific scrollable container — and exports the
 result as PNG, PDF, or semantic Markdown. Everything runs locally in
 your browser: no servers, no accounts, no telemetry.
 
-## Features (target scope)
+## Features
 
 - Capture Visible / Capture Full Page / Capture Selected Scroll Area
 - Export to PNG (lossless), PDF (paginated, with a searchable text
@@ -95,9 +107,29 @@ generation) lives in Rust, compiled to WebAssembly. See
 `docs/architecture/` for the Architecture Decision Records behind
 these choices.
 
+## Releases
+
+Every release is a Git tag of the form `vMAJOR.MINOR.PATCH`, with the same
+version in `Cargo.toml`, `extension/manifest.base.json` and
+`extension/package.json` (`cargo xtask test` fails if they drift). What
+changed in each version is in [`CHANGELOG.md`](CHANGELOG.md) and on the
+[Releases page](https://github.com/ATuManera/FullScreenShot/releases).
+
+| Version | Date       | Highlights |
+| ------- | ---------- | ---------- |
+| [0.1.0](https://github.com/ATuManera/FullScreenShot/releases/tag/v0.1.0) | 2026-09-27 | First public release: Capture Visible, Full Page and Selected Scroll Area in Chrome/Edge; PNG, searchable hybrid PDF and Markdown export. |
+
+Each release attaches `fullscreen-shot-chromium-<version>.zip`, the
+packaged Chrome/Edge extension. To install it:
+
+1. Download the zip from the release and unzip it.
+2. Open `chrome://extensions` (or `edge://extensions`) and enable
+   **Developer mode**.
+3. Click **Load unpacked** and select the unzipped folder.
+
 ## Installation
 
-### From source (current state — no store listing yet)
+### From source (no store listing yet)
 
 ```bash
 git clone https://github.com/ATuManera/FullScreenShot
@@ -125,10 +157,14 @@ no telemetry, no analytics, no cloud, no account, no remote code.
 
 ## Limitations
 
-Pre-alpha: capture, export, and Safari support are not implemented
-yet. Some internal browser pages cannot be captured by any extension
-regardless of permissions (browser security restriction) — FullScreenShot
-will report this clearly rather than silently fail.
+- Safari: compatibility analysis and the conversion script are in place,
+  but the Xcode project has not been built or signed yet — it needs a
+  full Xcode install. See `browser/safari/README.md`.
+- Some internal browser pages cannot be captured by any extension
+  regardless of permissions (browser security restriction) —
+  FullScreenShot reports this clearly rather than silently failing.
+- Selected Scroll Area does not detect regions inside Shadow DOM or
+  iframes, or regions scrolled by JavaScript over `overflow: hidden`.
 
 ## Design inspiration
 
@@ -150,8 +186,8 @@ See `LICENSE`, `NOTICE.md`, and `THIRD_PARTY_NOTICES.md`.
 
 ## Attribution
 
-FullScreenShot — original project by **ATuManera** / **Fernando
-Gallarday**. Canonical repository:
+FullScreenShot — original project by **A Tu Manera Digital** /
+**Fernando Gallarday**. Canonical repository:
 https://github.com/ATuManera/FullScreenShot. See `AUTHORS.md`,
 `NOTICE.md`, and `TRADEMARKS.md`.
 
@@ -165,3 +201,16 @@ https://github.com/ATuManera/FullScreenShot. See `AUTHORS.md`,
 - P6: Release-candidate packaging
 - P7: Searchable/selectable hybrid PDF (DOM text layer + link
   annotations)
+
+---
+
+### Transparency / Transparencia
+
+Parts of this project were developed with AI assistance. The models credited above assisted
+with design, implementation, debugging and documentation. Authorship, and responsibility for
+every change, rests with the human author, who reviewed, tested and released all of it.
+
+Partes de este proyecto se desarrollaron con asistencia de IA. Los modelos acreditados arriba
+asistieron en diseño, implementación, depuración y documentación. La autoría, y la
+responsabilidad sobre cada cambio, corresponden al autor humano, que revisó, probó y publicó
+todo el trabajo.
