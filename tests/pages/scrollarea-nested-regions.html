@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scroll area — nested and decoy regions</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px system-ui, sans-serif; background: #f8fafc; }
+  h1 { margin: 0; padding: 20px; background: #111827; color: #fff; font-size: 20px; }
+  p.note { padding: 12px 20px; margin: 0; color: #334155; }
+  .main { height: 520px; margin: 0 20px; overflow-y: auto; border: 3px solid #2563eb; background: #fff; }
+  .code { width: 520px; height: 150px; margin: 16px; overflow-y: auto; border: 3px solid #16a34a; background: #f0fdf4; font: 14px ui-monospace, "SF Mono", monospace; }
+  .code div { height: 36px; padding: 8px; }
+  .row { height: 110px; padding: 14px; border-bottom: 2px dashed #94a3b8; font: 700 26px ui-monospace, "SF Mono", monospace; }
+  .collapsed { max-height: 0; overflow: hidden; }
+  .collapsed .inner { height: 300px; overflow-y: auto; }
+  textarea { width: 360px; height: 60px; margin: 12px 20px; }
+</style>
+</head>
+<body>
+  <h1>A scroll region nested in another, plus two decoys</h1>
+  <p class="note">The popup must offer &ldquo;Choose scroll area… / 2 scrollable regions detected&rdquo;: the blue column and the green code block. The picker must outline exactly those two. The collapsed panel (invisible) and the text box (a form field) must not be offered.</p>
+  <textarea aria-label="notes">note line 1
+note line 2
+note line 3
+note line 4
+note line 5
+note line 6
+note line 7
+note line 8
+note line 9
+note line 10
+note line 11
+note line 12
+note line 13
+note line 14
+note line 15
+note line 16
+note line 17
+note line 18
+note line 19
+note line 20
+note line 21
+note line 22
+note line 23
+note line 24
+note line 25
+note line 26
+note line 27
+note line 28
+note line 29
+note line 30
+note line 31
+note line 32
+note line 33
+note line 34
+note line 35
+note line 36
+note line 37
+note line 38
+note line 39
+note line 40</textarea>
+  <div class="collapsed"><div class="inner" id="hidden-scroller"><div style="height: 1200px">HIDDEN — must never be offered</div></div></div>
+  <div class="main" id="main-column">
+    <div class="code" id="code-block">
+      <div>code line 1</div>
+      <div>code line 2</div>
+      <div>code line 3</div>
+      <div>code line 4</div>
+      <div>code line 5</div>
+      <div>code line 6</div>
+      <div>code line 7</div>
+      <div>code line 8</div>
+      <div>code line 9</div>
+      <div>code line 10</div>
+      <div>code line 11</div>
+      <div>code line 12</div>
+      <div>code line 13</div>
+      <div>code line 14</div>
+      <div>code line 15</div>
+      <div>code line 16</div>
+    </div>
+      <div class="row">COLUMN ROW 1</div>
+      <div class="row">COLUMN ROW 2</div>
+      <div class="row">COLUMN ROW 3</div>
+      <div class="row">COLUMN ROW 4</div>
+      <div class="row">COLUMN ROW 5</div>
+      <div class="row">COLUMN ROW 6</div>
+      <div class="row">COLUMN ROW 7</div>
+      <div class="row">COLUMN ROW 8</div>
+      <div class="row">COLUMN ROW 9</div>
+      <div class="row">COLUMN ROW 10</div>
+      <div class="row">COLUMN ROW 11</div>
+      <div class="row">COLUMN ROW 12</div>
+  </div>
+</body>
+</html>
