@@ -153,7 +153,70 @@ ponerlo en 0, elimina el atributo marcador y deshace el scroll de página que
 introdujo. `selectSoleScrollCandidate` incorpora el filtro de intersección con
 el viewport que `detectScrollCandidates` ya aplicaba, para que la clasificación
 0/1/N del popup y la decisión de captura directa del background no puedan
-discrepar.
+discrepar. *(Superado el 2026-09-27: ver "Un solo detector de regiones".)*
+
+## Un solo detector de regiones (revisión 2026-09-27)
+
+**Qué fallaba.** La detección existía en tres copias mantenidas a mano: la del
+popup (`detectScrollCandidates` + `rankAndDeduplicate`), la de captura directa
+(`selectSoleScrollCandidate`) y la del picker (`runSelectionPicker`). Solo el
+popup deduplicaba, así que el acuerdo que la revisión anterior buscaba no se
+cumplía. Verificado en Chromium con las funciones compiladas:
+
+- Un envoltorio y su hijo casi idénticos: el popup decía "1 región", la captura
+  directa encontraba 2 y abría el picker, que dibujaba dos contornos
+  superpuestos.
+- La deduplicación trataba como duplicado cualquier caja contenida en otra: una
+  columna principal con un bloque de código desplazable dentro perdía la
+  columna, y el popup ofrecía el bloque como la única región de la página.
+- El popup limitaba el recuento a 5 (`maxResults`) mientras el picker
+  resaltaba todas.
+- Un contenedor dentro de un panel colapsado (`max-height: 0; overflow:
+  hidden`) conserva su caja propia y se ofrecía aunque no se viera; un
+  `<textarea>` largo se ofrecía como región.
+- Con `html { overflow: hidden }` y un `body` desplazable, la raíz mide una
+  pantalla: Full Page capturaba solo esa pantalla y Scroll Area —que con razón
+  deja el `body` a Full Page— no encontraba nada.
+
+**Diseño.** `detectScrollCandidates(markAttr?)` es el único detector. Sin
+argumento solo lee la página (análisis del popup). Con él, marca cada candidato
+`markAttr="<índice>"`; el background ordena y deduplica fuera de la página con
+el mismo `rankAndDeduplicate` que el popup, `keepScrollCandidates` desmarca lo
+descartado, y entonces una región se captura directamente, varias abren el
+picker y ninguna responde `no-container` sin abrirlo. `runSelectionPicker` ya
+no detecta: resalta lo que está marcado (y repone esas marcas si tiene que
+desmontar un picker anterior que usaba el mismo atributo).
+`selectSoleScrollCandidate` desaparece.
+
+- La deduplicación exige casi-identidad en ambos sentidos (≥ 0,9 de solape de
+  cada caja sobre la otra). Una región contenida en otra mayor es una segunda
+  región.
+- `rankAndDeduplicate` no limita por defecto: el recuento del popup es el
+  número de contornos del picker.
+- La geometría reportada es la parte en pantalla de cada elemento, recortada
+  por el viewport y por cada ancestro que lo recorta (un elemento `absolute`
+  salta los ancestros estáticos hasta su bloque contenedor; uno `fixed`, todos).
+  Un elemento sin parte visible no es candidato.
+- `TEXTAREA`, `SELECT` e `INPUT` no son regiones: desplazan su valor, no
+  contenido de la página.
+- Full Page consulta primero `locatePageScroller`: si la raíz no se desplaza y
+  el `body` sí, captura el `body` por el camino de contenedor
+  (`captureScrollArea`). En ese caso el pre-scroll de Reliable, que mueve la
+  ventana, no se aplica.
+
+**Fuera de alcance (no detectado, sin cambios).** Contenedores dentro de Shadow
+DOM, documentos en `iframe`, scroll implementado por JavaScript sobre
+`overflow: hidden` (barras de desplazamiento personalizadas), regiones fuera
+del viewport, y una app cuyo contenedor fijo de pantalla completa hace de
+página (`#app { position: fixed; inset: 0; overflow: auto }`): Scroll Area lo
+ofrece como región única, pero Full Page sigue capturando una pantalla.
+
+**Verificación.** `npm test`: 238/238. En Chromium, contra el output compilado:
+`tests/pages/scrollarea-nested-regions.html` → 2 regiones (columna y bloque de
+código), el panel colapsado y el `textarea` excluidos;
+`tests/pages/body-scroller.html` → Full Page recorre el `body` en bandas
+0 → 800 → 1200 de 2000 px y retira el marcador; `scrollarea-single.html`,
+`scrollarea-multiple.html` y `nested-scroll.html` sin cambios (1, 2 y 1).
 
 ## Gate de salida de P2 — resultado real
 
@@ -183,3 +246,4 @@ discrepar.
 | 2026-09-18 | `98780c2` | Reliable mode cableado de extremo a extremo (`lazyMode` en el contrato `START_CAPTURE`, validado y propagado hasta `captureFullPage`) y reparación de la condición de parada del pre-scroll. Verificado en Chromium con `tests/pages/lazy-fullpage-acceptance.html`: Fast 1200x2100 con 3 secciones, Reliable 1200x4200 con 6. |
 | 2026-09-18 | `e121f5e`, `60862db` | Desenlaces terminales de la selección: Escape se reporta como cancelación y no como error, `no-candidates` se separa de `cancelled`, el desenlace se entrega con acuse y reintento acotado, y el estado autoritativo refleja la espera. Medido en Chromium: Escape → idle en 7 ms. |
 | 2026-09-18 | `e1cc3e0` | Traspaso explícito del picker: `PICKER_ARMED` por sesión, el popup se cierra solo cuando hay picker que recibir al usuario, y una sola pulsación de Escape cancela. Medido en Chromium: popup cerrado ~100 ms tras armar; Escape → idle en 255 ms. |
+| 2026-09-27 | `d4a540e`, `5d62a9e` | Un solo detector de regiones: popup, captura directa y picker comparten detección y deduplicación; la deduplicación exige casi-identidad mutua (una región dentro de otra ya no se pierde); recuento sin tope; geometría recortada a lo visible; campos de formulario excluidos; Full Page captura un `body` desplazable. Verificado en Chromium con `tests/pages/scrollarea-nested-regions.html` y `tests/pages/body-scroller.html`. |
